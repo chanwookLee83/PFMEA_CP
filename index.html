@@ -1400,46 +1400,67 @@ const PFMEA_COL_KW={
 const CP_COL_KW={
   pn:    ['공정번호','op#','공정 번호'],
   op:    ['공정명','작업설명','공정명/작업설명','operation'],
-  mach:  ['기계','치공구','지그','machine','기계/지그','기계/치공구'],
-  char:  ['특성','특성구분','구분','characteristic'],
-  feat:  ['관리특성','관리 특성','feature','특성명'],
+  mach:  ['설비명','설비 명','기계','치공구','지그','machine'],
+  char:  ['특별특성','특별 특성','특성구분','구분','characteristic'],
+  feat:  ['관리특성','관리 특성','feature','제품','특성명'],
   spec:  ['규격','공차','규격/공차','specification'],
-  gage:  ['측정기법','게이지','측정방법','gage','measurement','측정 기법'],
-  size:  ['샘플크기','size','샘플 크기','sample'],
-  freq:  ['빈도','frequency','측정빈도'],
-  method:['관리방법','관리 방법','method'],
-  react: ['반응계획','반응 계획','reaction plan','reaction']
+  gage:  ['확인방법','확인 방법','측정기법','게이지','측정방법','gage'],
+  size:  ['샘플크기','size','샘플 크기','sample size'],
+  freq:  ['주기','빈도','frequency','측정빈도'],
+  method:['관리방법','관리방안','관리 방법','method'],
+  react: ['이상 발생','이상발생','조치 사항','조치사항','반응계획','반응 계획','reaction']
 };
 
-function tplDetectHeaderRow(ws,kwMap){
+// 다중 헤더 행 및 데이터 시작 행 감지
+function tplDetectHeaders(ws,kwMap){
   const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
-  let best={row:range.s.r, score:0};
-  for(let r=range.s.r; r<=Math.min(range.e.r, range.s.r+30); r++){
-    let score=0;
-    for(let c=range.s.c; c<=Math.min(range.e.c, range.s.c+40); c++){
+  const scores={};
+  for(let r=range.s.r; r<=Math.min(range.e.r,range.s.r+30); r++){
+    let sc=0;
+    for(let c=range.s.c; c<=Math.min(range.e.c,range.s.c+50); c++){
       const cell=ws[XLSX.utils.encode_cell({r,c})];
       if(!cell) continue;
-      const t=String(cell.v||'').toLowerCase().replace(/\s+/g,' ').trim();
+      const t=String(cell.v||'').toLowerCase().replace(/[\s　]+/g,' ').trim();
       if(!t) continue;
       for(const kws of Object.values(kwMap)){
-        if(kws.some(k=>t.includes(k))){ score++; break; }
+        if(kws.some(k=>t.includes(k))){ sc++; break; }
       }
     }
-    if(score>best.score) best={row:r, score};
+    scores[r]=sc;
   }
-  return best.score>=2 ? best.row : -1;
+  let bestRow=range.s.r, bestSc=0;
+  for(const [r,s] of Object.entries(scores)){
+    if(+s>bestSc){ bestSc=+s; bestRow=+r; }
+  }
+  if(bestSc<2) return null;
+  // 인접 헤더 행 확장 (병합 헤더 대응)
+  let hStart=bestRow, hEnd=bestRow;
+  for(let r=bestRow-1; r>=range.s.r&&r>=bestRow-5; r--){
+    if((scores[r]||0)>=1) hStart=r; else break;
+  }
+  for(let r=bestRow+1; r<=Math.min(range.e.r,bestRow+5); r++){
+    if((scores[r]||0)>=1) hEnd=r; else break;
+  }
+  return{
+    headerRows:Array.from({length:hEnd-hStart+1},(_,i)=>hStart+i),
+    dataStart:hEnd+1
+  };
 }
 
-function tplMapCols(ws,hr,kwMap){
+// 복수 헤더 행 전체에서 컬럼 매핑
+function tplMapCols(ws,headerRows,kwMap){
   const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
   const map={};
-  for(let c=range.s.c; c<=Math.min(range.e.c, range.s.c+40); c++){
-    const cell=ws[XLSX.utils.encode_cell({r:hr,c})];
-    if(!cell) continue;
-    const t=String(cell.v||'').toLowerCase().replace(/\s+/g,' ').trim();
-    for(const [f,kws] of Object.entries(kwMap)){
-      if(map[f]!==undefined) continue;
-      if(kws.some(k=>t.includes(k))) map[f]=c;
+  const rows=Array.isArray(headerRows)?headerRows:[headerRows];
+  for(const hr of rows){
+    for(let c=range.s.c; c<=Math.min(range.e.c,range.s.c+50); c++){
+      const cell=ws[XLSX.utils.encode_cell({r:hr,c})];
+      if(!cell) continue;
+      const t=String(cell.v||'').toLowerCase().replace(/[\s　]+/g,' ').trim();
+      for(const [f,kws] of Object.entries(kwMap)){
+        if(map[f]!==undefined) continue;
+        if(kws.some(k=>t.includes(k))) map[f]=c;
+      }
     }
   }
   return map;
@@ -1461,13 +1482,12 @@ function tplFindSheet(wb,terms){
   return null;
 }
 
-function tplFillSheet(ws,hr,colMap,rows,type){
-  const start=hr+1;
+function tplFillSheet(ws,dataStart,colMap,rows,type){
   const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
-  // 기존 데이터 행 삭제 (매핑된 컬럼 기준)
   const mappedCols=Object.values(colMap);
-  for(let r=start; r<=range.e.r+1; r++){
-    let hasContent=mappedCols.some(c=>{
+  // 기존 데이터 행 삭제
+  for(let r=dataStart; r<=range.e.r+1; r++){
+    const hasContent=mappedCols.some(c=>{
       const cell=ws[XLSX.utils.encode_cell({r,c})];
       return cell&&cell.v!==''&&cell.v!==undefined;
     });
@@ -1476,7 +1496,7 @@ function tplFillSheet(ws,hr,colMap,rows,type){
   }
   // 데이터 삽입
   rows.forEach(({proc:p,data:d},i)=>{
-    const r=start+i;
+    const r=dataStart+i;
     const set=(f,v)=>{
       if(colMap[f]===undefined) return;
       ws[XLSX.utils.encode_cell({r,c:colMap[f]})]={v,t:typeof v==='number'?'n':'s'};
@@ -1496,9 +1516,8 @@ function tplFillSheet(ws,hr,colMap,rows,type){
       set('react',d.react||'');
     }
   });
-  // !ref 범위 갱신
   if(rows.length>0){
-    range.e.r=Math.max(range.e.r, start+rows.length-1);
+    range.e.r=Math.max(range.e.r,dataStart+rows.length-1);
     ws['!ref']=XLSX.utils.encode_range(range);
   }
 }
@@ -1542,50 +1561,45 @@ function updateTplBtn(){
 function exportExcelWithTpl(){
   const wb=XLSX.utils.book_new();
   for(const name of tplWorkbook.SheetNames){
-    XLSX.utils.book_append_sheet(wb, tplCloneSheet(tplWorkbook.Sheets[name]), name);
+    XLSX.utils.book_append_sheet(wb,tplCloneSheet(tplWorkbook.Sheets[name]),name);
   }
   const pfmeaRows=procs.flatMap(p=>(p.pfmea||[]).map(d=>({proc:p,data:d})));
   const cpRows=procs.flatMap(p=>(p.cp||[]).map(d=>({proc:p,data:d})));
   let pfmeaOk=false, cpOk=false;
 
-  // 이름으로 시트 찾기
   const pfmeaSN=tplFindSheet(wb,['pfmea','고장모드분석','고장분석','fmea']);
   if(pfmeaSN){
-    const ws=wb.Sheets[pfmeaSN];
-    const hr=tplDetectHeaderRow(ws,PFMEA_COL_KW);
-    if(hr>=0){ const cm=tplMapCols(ws,hr,PFMEA_COL_KW); tplFillSheet(ws,hr,cm,pfmeaRows,'pfmea'); pfmeaOk=true; }
+    const info=tplDetectHeaders(wb.Sheets[pfmeaSN],PFMEA_COL_KW);
+    if(info){ const cm=tplMapCols(wb.Sheets[pfmeaSN],info.headerRows,PFMEA_COL_KW); tplFillSheet(wb.Sheets[pfmeaSN],info.dataStart,cm,pfmeaRows,'pfmea'); pfmeaOk=true; }
   }
   const cpSN=tplFindSheet(wb,['control plan','controlplan','cp','관리계획','관리계획서']);
   if(cpSN){
-    const ws=wb.Sheets[cpSN];
-    const hr=tplDetectHeaderRow(ws,CP_COL_KW);
-    if(hr>=0){ const cm=tplMapCols(ws,hr,CP_COL_KW); tplFillSheet(ws,hr,cm,cpRows,'cp'); cpOk=true; }
+    const info=tplDetectHeaders(wb.Sheets[cpSN],CP_COL_KW);
+    if(info){ const cm=tplMapCols(wb.Sheets[cpSN],info.headerRows,CP_COL_KW); tplFillSheet(wb.Sheets[cpSN],info.dataStart,cm,cpRows,'cp'); cpOk=true; }
   }
 
-  // 이름으로 못 찾으면 전체 시트 내용 스캔
+  // 이름으로 못 찾으면 전체 시트 스캔
   if(!pfmeaOk||!cpOk){
     for(const name of wb.SheetNames){
       if(name===pfmeaSN||name===cpSN) continue;
       const ws=wb.Sheets[name];
       if(!pfmeaOk){
-        const hr=tplDetectHeaderRow(ws,PFMEA_COL_KW);
-        if(hr>=0){
-          const cm=tplMapCols(ws,hr,PFMEA_COL_KW);
-          if(Object.keys(cm).length>=4){ tplFillSheet(ws,hr,cm,pfmeaRows,'pfmea'); pfmeaOk=true; }
+        const info=tplDetectHeaders(ws,PFMEA_COL_KW);
+        if(info&&Object.keys(tplMapCols(ws,info.headerRows,PFMEA_COL_KW)).length>=4){
+          tplFillSheet(ws,info.dataStart,tplMapCols(ws,info.headerRows,PFMEA_COL_KW),pfmeaRows,'pfmea'); pfmeaOk=true;
         }
       }
       if(!cpOk){
-        const hr=tplDetectHeaderRow(ws,CP_COL_KW);
-        if(hr>=0){
-          const cm=tplMapCols(ws,hr,CP_COL_KW);
-          if(Object.keys(cm).length>=4){ tplFillSheet(ws,hr,cm,cpRows,'cp'); cpOk=true; }
+        const info=tplDetectHeaders(ws,CP_COL_KW);
+        if(info&&Object.keys(tplMapCols(ws,info.headerRows,CP_COL_KW)).length>=4){
+          tplFillSheet(ws,info.dataStart,tplMapCols(ws,info.headerRows,CP_COL_KW),cpRows,'cp'); cpOk=true;
         }
       }
     }
   }
 
   if(!pfmeaOk&&!cpOk){
-    toast('양식에서 PFMEA/CP 헤더를 찾을 수 없습니다. 헤더 행에 "고장모드", "발생도", "관리특성" 등의 키워드가 있어야 합니다.','err');
+    toast('양식에서 PFMEA/CP 헤더를 찾을 수 없습니다. 헤더 행에 "고장모드", "발생도", "특별특성", "규격", "확인방법" 등의 키워드가 있어야 합니다.','err');
     return;
   }
   const pn=V('partNum')||'N/A';
