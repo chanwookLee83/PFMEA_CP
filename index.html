@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f1117">
+<meta name="description" content="AIAG-VDA 기반 AI PFMEA / Control Plan 작성 도구">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PFMEA AI">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<title>PFMEA / CP AI — AIAG-VDA</title>
+
+<!-- External libs -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+/* ── Reset & Variables ─────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg1:#0f1117;--bg2:#171a22;--bg3:#1e2130;--bg4:#252840;
+  --border:#2e3248;--border2:#3d4260;
+  --accent:#4f7cff;--accent2:#6b8fff;
+  --success:#22c55e;--warn:#f59e0b;--danger:#ef4444;
+  --text1:#e8eaf0;--text2:#9ca3c0;--text3:#6b7490;
+  --r:8px;--r2:12px;
+}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg1);color:var(--text1);min-height:100vh;font-size:14px;overflow:hidden}
+
+/* ── Layout ─────────────────────────────────────────── */
+.app{display:flex;height:100vh;overflow:hidden}
+
+/* ── Sidebar ─────────────────────────────────────────── */
+.sidebar{
+  width:260px;background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;flex-shrink:0;transition:transform .25s;
+}
+.sidebar-header{padding:16px;border-bottom:1px solid var(--border)}
+.logo-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.logo-icon{
+  width:34px;height:34px;border-radius:9px;
+  background:linear-gradient(135deg,#4f7cff,#8b5cf6);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:#fff;flex-shrink:0
+}
+.logo-row h1{font-size:14px;font-weight:600;line-height:1.2}
+.logo-row p{font-size:10px;color:var(--text3);margin-top:1px}
+.proj-block{padding:10px 14px;border-bottom:1px solid var(--border)}
+.proj-block label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#8b9abf;font-weight:600;display:block;margin-bottom:5px;margin-top:10px}
+.proj-block label:first-child{margin-top:0}
+.proj-block input{
+  width:100%;background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);padding:7px 9px;color:#dde0f0;
+  font-size:13px;font-weight:500;outline:none;transition:border-color .15s
+}
+.proj-block input:focus{border-color:var(--accent)}
+.proc-list{flex:1;overflow-y:auto;padding:6px}
+.proc-list::-webkit-scrollbar{width:3px}
+.proc-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.proc-item{
+  padding:9px 10px;border-radius:var(--r);cursor:pointer;
+  margin-bottom:2px;border:1px solid transparent;transition:.15s
+}
+.proc-item:hover{background:var(--bg3)}
+.proc-item.active{background:var(--bg4);border-color:var(--border2)}
+.proc-item .pn{font-size:10px;color:var(--text3)}
+.proc-item .pname{font-size:12px;font-weight:500;color:var(--text1);margin-top:2px}
+.proc-item .pstatus{display:flex;align-items:center;gap:5px;margin-top:4px}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.sdot.done{background:var(--success)}
+.sdot.analyzing{background:var(--warn);animation:pulse 1s infinite}
+.sdot.error{background:var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.stext{font-size:10px;color:var(--text3)}
+.ai-pill{
+  font-size:9px;padding:1px 5px;border-radius:3px;
+  background:rgba(79,124,255,.1);color:var(--accent2);
+  border:1px solid rgba(79,124,255,.2);
+}
+.add-btn{
+  margin:6px;padding:8px;border:1px dashed var(--border2);
+  border-radius:var(--r);background:transparent;color:var(--text2);
+  cursor:pointer;font-size:12px;display:flex;align-items:center;
+  justify-content:center;gap:6px;transition:.15s;
+}
+.add-btn:hover{background:var(--bg3);border-color:var(--accent);color:var(--accent)}
+
+/* ── Main ─────────────────────────────────────────────── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{
+  height:52px;background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 16px;gap:10px;flex-shrink:0
+}
+.topbar-title{font-size:13px;font-weight:600;color:var(--text1);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab-grp{display:flex;gap:2px;background:var(--bg3);padding:3px;border-radius:var(--r);border:1px solid var(--border)}
+.tabx{
+  padding:4px 12px;border-radius:6px;border:none;background:transparent;
+  color:var(--text2);cursor:pointer;font-size:12px;font-weight:500;transition:.15s
+}
+.tabx.on{background:var(--bg4);color:var(--text1);border:1px solid var(--border2)}
+.export-grp{display:flex;gap:6px}
+.btn{
+  padding:5px 12px;border-radius:var(--r);border:1px solid var(--border2);
+  background:var(--bg3);color:var(--text2);cursor:pointer;font-size:12px;
+  display:flex;align-items:center;gap:5px;transition:.15s;white-space:nowrap
+}
+.btn:hover{background:var(--bg4);color:var(--text1)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent2);border-color:var(--accent2)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.content{flex:1;overflow-y:auto;padding:18px;background:var(--bg1)}
+.content::-webkit-scrollbar{width:4px}
+.content::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── Upload zone ─────────────────────────────────────── */
+.upload-zone{
+  border:2px dashed var(--border2);border-radius:var(--r2);
+  padding:28px 20px;text-align:center;cursor:pointer;transition:.2s;
+  background:var(--bg3)
+}
+.upload-zone:hover,.upload-zone.over{border-color:var(--accent);background:var(--bg4)}
+.upload-zone i{font-size:30px;color:var(--text3);display:block;margin-bottom:8px}
+.upload-zone h3{font-size:13px;color:var(--text2);margin-bottom:4px}
+.upload-zone p{font-size:11px;color:var(--text3)}
+
+/* ── Form inputs ─────────────────────────────────────── */
+.fblock{margin-bottom:12px}
+.fblock label{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text3);display:block;margin-bottom:5px}
+.fblock input,.fblock textarea,.fblock select{
+  width:100%;background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);padding:7px 10px;color:var(--text1);
+  font-size:13px;outline:none;resize:vertical;font-family:inherit;transition:border-color .15s
+}
+.fblock input:focus,.fblock textarea:focus{border-color:var(--accent)}
+.fblock textarea{min-height:72px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* ── Tables ──────────────────────────────────────────── */
+.tbl-wrap{
+  overflow-x:auto;
+  overflow-y:visible;
+  /* 스크롤바 항상 표시 */
+  scrollbar-width:thin;
+  scrollbar-color:var(--border2) transparent;
+}
+.tbl-wrap::-webkit-scrollbar{height:6px}
+.tbl-wrap::-webkit-scrollbar-track{background:var(--bg3);border-radius:3px}
+.tbl-wrap::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.tbl-wrap::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+table{
+  width:max-content; /* 내용 폭에 맞게 늘어남 — 줄바꿈 없음 */
+  min-width:100%;
+  border-collapse:collapse;
+  table-layout:fixed
+}
+th{
+  font-size:12px; /* 기존 10px → +2px */
+  text-transform:uppercase;
+  letter-spacing:.4px;
+  color:#b8bde0; /* 기존 text3보다 밝고 선명한 헤더 색 */
+  padding:9px 11px;
+  text-align:left;
+  border-bottom:2px solid var(--accent); /* 헤더 구분선 강조 */
+  background:#1a1d2e; /* 헤더 전용 배경 */
+  font-weight:700; /* 볼드 강화 */
+  white-space:nowrap;
+  position:sticky;top:0;z-index:2;
+  letter-spacing:.6px;
+}
+td{
+  padding:8px 11px;
+  border-bottom:1px solid var(--border);
+  font-size:12px;
+  color:#c4c8e0;
+  vertical-align:middle;
+  line-height:1.5;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+td[contenteditable="true"]{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+/* 숫자 전용 셀 — 절대 밀리지 않도록 */
+td.num-cell{
+  overflow:hidden !important;
+  white-space:nowrap !important;
+  text-align:center !important;
+  padding:8px 2px !important;
+  vertical-align:middle !important;
+}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(79,124,255,.05)}
+td[contenteditable="true"]{outline:none;cursor:text}
+td[contenteditable="true"]:focus{
+  background:var(--bg4)!important;
+  color:#eef0ff !important;
+  box-shadow:inset 0 -2px 0 var(--accent);
+  white-space:normal; /* 편집 시 줄바꿈 허용 */
+  overflow:visible;
+  max-width:none;
+  z-index:1;
+  position:relative;
+}
+
+/* ── Badges & pills ──────────────────────────────────── */
+.badge{font-size:9px;padding:2px 7px;border-radius:20px;font-weight:500;border:1px solid}
+.badge-ai{background:rgba(79,124,255,.12);color:var(--accent2);border-color:rgba(79,124,255,.25)}
+.badge-ok{background:rgba(34,197,94,.08);color:var(--success);border-color:rgba(34,197,94,.2)}
+.sv{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;border-radius:4px;font-size:11px;font-weight:700
+}
+.sv-l{background:rgba(34,197,94,.15);color:var(--success)}
+.sv-m{background:rgba(245,158,11,.15);color:var(--warn)}
+.sv-h{background:rgba(239,68,68,.15);color:var(--danger)}
+.sv-x{background:rgba(239,68,68,.25);color:#ff6b6b}
+.rpn{font-weight:700;font-size:13px}
+.rpn-l{color:var(--success)}.rpn-m{color:var(--warn)}.rpn-h{color:var(--danger)}
+.char-sc{background:rgba(239,68,68,.12);color:var(--danger);border:1px solid rgba(239,68,68,.2)}
+.char-cc{background:rgba(245,158,11,.12);color:var(--warn);border:1px solid rgba(245,158,11,.2)}
+.char-g{background:rgba(79,124,255,.1);color:var(--accent2);border:1px solid rgba(79,124,255,.2)}
+
+/* ── Stat cards ──────────────────────────────────────── */
+.stats{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.stat{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);padding:10px 14px;flex:1;min-width:100px
+}
+.stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3)}
+.stat-val{font-size:22px;font-weight:600;color:var(--text1);margin-top:3px}
+
+/* ── Section card ─────────────────────────────────────── */
+.section{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r2);overflow:hidden;margin-bottom:14px
+}
+.section-head{
+  padding:11px 15px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px
+}
+.section-head h3{font-size:13px;font-weight:600;flex:1}
+
+/* ── Loading ─────────────────────────────────────────── */
+.loading-box{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:60px 20px;gap:14px
+}
+.spinner{
+  width:34px;height:34px;border:3px solid var(--border2);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin .7s linear infinite
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-step{font-size:11px;color:var(--text3)}
+
+/* ── Empty state ─────────────────────────────────────── */
+.empty{text-align:center;padding:60px 20px}
+.empty i{font-size:42px;display:block;margin-bottom:12px;opacity:.35}
+.empty h3{font-size:15px;color:var(--text2);margin-bottom:6px}
+.empty p{font-size:12px;color:var(--text3);line-height:1.7}
+
+/* ── Toast ───────────────────────────────────────────── */
+.toast{
+  position:fixed;bottom:20px;right:20px;
+  background:var(--bg4);border:1px solid var(--border2);
+  border-radius:var(--r);padding:9px 14px;
+  font-size:12px;color:var(--text1);z-index:9999;
+  opacity:0;transform:translateY(6px);transition:.2s;pointer-events:none
+}
+.toast.show{opacity:1;transform:none}
+.toast.ok{border-color:rgba(34,197,94,.4);color:var(--success)}
+.toast.err{border-color:rgba(239,68,68,.4);color:var(--danger)}
+
+/* ── Modal ───────────────────────────────────────────── */
+.backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,.65);
+  z-index:500;display:none;align-items:center;justify-content:center;
+  padding:20px
+}
+.backdrop.open{display:flex}
+.modal{
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:var(--r2);padding:20px;width:420px;
+  max-width:100%;max-height:90vh;overflow-y:auto
+}
+.modal-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px
+}
+.modal-head h3{font-size:15px;font-weight:600}
+.modal-head button{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.pdf-thumb{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);padding:12px;text-align:center;margin-bottom:10px
+}
+.pdf-thumb img{max-width:100%;max-height:140px;object-fit:contain;border-radius:4px}
+.pdf-thumb .fname{font-size:11px;color:var(--text3);margin-top:6px}
+
+/* ── API Key setup ───────────────────────────────────── */
+.api-bar{
+  background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);
+  border-radius:var(--r);padding:10px 14px;margin-bottom:14px;
+  display:flex;align-items:center;gap:10px
+}
+.api-bar p{flex:1;font-size:12px;color:var(--warn)}
+.api-input-row{display:flex;gap:8px;align-items:center;margin-top:6px}
+.api-input-row input{
+  flex:1;background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);padding:6px 10px;color:var(--text1);
+  font-size:12px;outline:none;font-family:monospace
+}
+.api-input-row input:focus{border-color:var(--accent)}
+
+/* ── Responsive ──────────────────────────────────────── */
+@media(max-width:768px){
+  .sidebar{position:fixed;left:0;top:0;height:100%;z-index:100;transform:translateX(-100%)}
+  .sidebar.open{transform:none}
+  .menu-btn{display:flex!important}
+  .row2{grid-template-columns:1fr}
+}
+.menu-btn{display:none;background:none;border:none;color:var(--text1);cursor:pointer;font-size:20px;margin-right:4px}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ── Sidebar ── -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-row">
+        <div class="logo-icon"><i class="ti ti-analyze" style="font-size:16px"></i></div>
+        <div>
+          <h1>PFMEA / CP AI</h1>
+          <p>AIAG-VDA 5th Edition</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="proj-block">
+      <label>품번</label>
+      <input id="partNum" placeholder="예) AA-12345-A" oninput="saveMeta()">
+      <label>품명</label>
+      <input id="partName" placeholder="예) 커넥터 브라켓" oninput="saveMeta()">
+      <label>고객사</label>
+      <input id="customer" placeholder="예) Hyundai MOBIS" oninput="saveMeta()">
+      <label>공장</label>
+      <input id="plant" placeholder="예) 창원 1공장" oninput="saveMeta()">
+      <label>PFMEA No.</label>
+      <input id="pfmeaNo" placeholder="예) PFMEA-2025-001" oninput="saveMeta()">
+      <label style="margin-top:10px">프로젝트 도면 (전 공정 공통)</label>
+      <div id="projUploadZone" class="upload-zone" style="padding:14px 10px;margin-top:4px"
+           onclick="document.getElementById('projFileIn').click()"
+           ondrop="onProjDrop(event)" ondragover="onProjOver(event)" ondragleave="onProjLeave(event)">
+        <i class="ti ti-file-upload" aria-hidden="true" style="font-size:20px;display:block;margin-bottom:4px"></i>
+        <p style="font-size:11px">PDF / 이미지 업로드</p>
+      </div>
+      <div id="projThumb" style="display:none;margin-top:6px"></div>
+      <input type="file" id="projFileIn" accept=".pdf,image/*" style="display:none" onchange="onProjFileSel(event)">
+    </div>
+
+    <div class="proc-list" id="procList"></div>
+
+    <button class="add-btn" onclick="openAdd()">
+      <i class="ti ti-plus" style="font-size:14px"></i> 공정 추가
+    </button>
+  </div>
+
+  <!-- ── Main ── -->
+  <div class="main">
+    <div class="topbar">
+      <button class="menu-btn" onclick="toggleSidebar()"><i class="ti ti-menu-2"></i></button>
+      <span class="topbar-title" id="topTitle">공정을 선택하거나 추가하세요</span>
+      <div class="tab-grp">
+        <button class="tabx on" id="t-pfmea" onclick="switchTab('pfmea')">PFMEA</button>
+        <button class="tabx" id="t-cp" onclick="switchTab('cp')">Control Plan</button>
+      </div>
+      <div class="export-grp">
+        <button class="btn" id="btnXls" onclick="exportExcel()" disabled><i class="ti ti-file-spreadsheet" style="font-size:13px"></i> Excel</button>
+        <button class="btn" id="btnPdf" onclick="exportPDF()" disabled><i class="ti ti-file-type-pdf" style="font-size:13px"></i> PDF</button>
+        <button class="btn" id="btnApiKey" onclick="openApiModal()" title="API 키 변경" style="padding:5px 9px"><i class="ti ti-key" style="font-size:14px"></i></button>
+      </div>
+    </div>
+
+    <div class="content" id="content">
+      <div id="apiBar" style="display:none" class="api-bar">
+        <div style="flex:1">
+          <p><i class="ti ti-key" style="font-size:13px;margin-right:5px"></i><strong>Anthropic API 키 필요</strong> — AI 분석을 사용하려면 입력하세요</p>
+          <div class="api-input-row">
+            <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-...">
+            <button class="btn primary" onclick="saveApiKey()">저장</button>
+          </div>
+        </div>
+      </div>
+      <div class="empty" id="welcomeMsg">
+        <i class="ti ti-brain" style="color:var(--accent)"></i>
+        <h3>AI 기반 PFMEA / Control Plan</h3>
+        <p>왼쪽 패널에서 공정을 추가하고<br>도면을 업로드하면 AI가 자동 분석합니다<br><br>
+        <span style="font-size:11px;color:var(--text3)">AIAG-VDA 5th Edition 기준 · IATF 16949</span></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Process Modal ── -->
+<div class="backdrop" id="addModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3><i class="ti ti-plus-circle" style="color:var(--accent);margin-right:7px"></i>공정 추가</h3>
+      <button onclick="closeAdd()"><i class="ti ti-x"></i></button>
+    </div>
+
+    <!-- 도면은 사이드바에서 프로젝트 공통으로 등록 -->
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);display:flex;align-items:center;gap:8px">
+      <i class="ti ti-info-circle" style="color:var(--accent2);font-size:14px;flex-shrink:0"></i>
+      도면은 왼쪽 패널에서 프로젝트 공통으로 1회 등록합니다.
+      <span id="modalDrawingStatus" style="margin-left:auto;white-space:nowrap"></span>
+    </div>
+    <div class="row2">
+      <div class="fblock">
+        <label>공정 번호</label>
+        <input id="nNum" placeholder="예) OP-10">
+      </div>
+      <div class="fblock">
+        <label>공정명 *</label>
+        <input id="nName" placeholder="예) 프레스 가공">
+      </div>
+    </div>
+    <div class="fblock">
+      <label>공정 기능 / 특성 * (상세할수록 AI 품질 향상)</label>
+      <textarea id="nFunc" rows="4"
+        placeholder="예) φ8.5 드릴 가공, 깊이 12±0.1mm&#10;진위치도 ⌀0.05, 표면 Ra1.6&#10;재질: SPCC t1.5, 가공온도 상온&#10;특별특성: 구멍 위치도 SC"></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="closeAdd()">취소</button>
+      <button class="btn primary" onclick="addProc()">
+        <i class="ti ti-sparkles" style="font-size:13px"></i> AI 분석 시작
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- API Key Modal -->
+<div class="backdrop" id="apiModal">
+  <div class="modal" style="width:380px">
+    <div class="modal-head">
+      <h3><i class="ti ti-key" style="color:var(--accent);margin-right:7px"></i>API 키 설정</h3>
+      <button onclick="closeApiModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <p style="font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:14px">
+      Anthropic Console에서 발급한 API 키를 입력하세요.<br>
+      키는 이 브라우저 localStorage에만 저장되며 외부로 전송되지 않습니다.
+    </p>
+    <div class="fblock">
+      <label>API 키</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="password" id="apiModalInput" placeholder="sk-ant-api03-..." style="flex:1;font-family:monospace;font-size:12px" onkeydown="if(event.key==='Enter')saveApiModal()">
+        <button onclick="toggleApiVis()" class="btn" style="padding:6px 9px;flex-shrink:0" title="표시/숨김"><i class="ti ti-eye" id="apiVisIcon" style="font-size:14px"></i></button>
+      </div>
+    </div>
+    <div id="apiCurrentStatus" style="font-size:11px;color:var(--text3);margin-top:-4px;margin-bottom:10px"></div>
+    <a href="https://console.anthropic.com/settings/keys" target="_blank"
+       style="font-size:11px;color:var(--accent2);text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-bottom:14px">
+      <i class="ti ti-external-link" style="font-size:12px"></i> Anthropic Console에서 키 발급
+    </a>
+    <div class="modal-actions">
+      <button class="btn" style="color:var(--danger);border-color:rgba(239,68,68,.3)" onclick="deleteApiKey()"><i class="ti ti-trash" style="font-size:13px"></i> 키 삭제</button>
+      <button class="btn" onclick="closeApiModal()">취소</button>
+      <button class="btn primary" onclick="saveApiModal()"><i class="ti ti-check" style="font-size:13px"></i> 저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ── SW Registration ── -->
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+
+<!-- ── App Script ── -->
+<script>
+/* ─ State ─ */
+const API_URL = 'https://api.anthropic.com/v1/messages';
+let procs = [];
+let cur = -1;
+let tab = 'pfmea';
+let upFile = null, upData = null, upType = null;
+let projFileData = null, projFileType = null, projFileName = null;
+
+/* ─ Persist ─ */
+function saveAll(){
+  try{
+    const state = {
+      procs: procs.map(p=>({...p,fileData:null})), // fileData 저장 제외 (용량)
+      meta:{
+        partNum:V('partNum'),partName:V('partName'),
+        customer:V('customer'),plant:V('plant'),pfmeaNo:V('pfmeaNo')
+      }
+    };
+    localStorage.setItem('pfmea_state', JSON.stringify(state));
+  }catch(e){}
+}
+function loadAll(){
+  try{
+    const raw = localStorage.getItem('pfmea_state');
+    if(!raw) return;
+    const state = JSON.parse(raw);
+    procs = state.procs || [];
+    const m = state.meta||{};
+    ['partNum','partName','customer','plant','pfmeaNo'].forEach(k=>{
+      if(m[k]) document.getElementById(k).value = m[k];
+    });
+  }catch(e){}
+}
+function saveMeta(){ saveAll(); }
+
+/* ─ API Key ─ */
+function getKey(){ return localStorage.getItem('pfmea_apikey')||''; }
+function saveApiKey(){
+  const v = document.getElementById('apiKeyInput') && document.getElementById('apiKeyInput').value.trim();
+  if(!v){ toast('API 키를 입력하세요','err'); return; }
+  localStorage.setItem('pfmea_apikey', v);
+  const bar = document.getElementById('apiBar');
+  if(bar) bar.style.display='none';
+  updateApiKeyBtn();
+  toast('API 키 저장 완료','ok');
+}
+function checkApiBar(){
+  if(!getKey()){
+    const bar = document.getElementById('apiBar');
+    if(bar) bar.style.display='block';
+  }
+  updateApiKeyBtn();
+}
+function updateApiKeyBtn(){
+  const btn = document.getElementById('btnApiKey');
+  if(!btn) return;
+  if(getKey()){
+    btn.style.color='var(--success)';
+    btn.title='API 키 변경';
+  } else {
+    btn.style.color='var(--warn)';
+    btn.title='API 키 입력 필요';
+  }
+}
+
+/* ─ API Key Modal ─ */
+function openApiModal(){
+  const cur = getKey();
+  const inp = document.getElementById('apiModalInput');
+  inp.value = cur || '';
+  inp.type = 'password';
+  document.getElementById('apiVisIcon').className='ti ti-eye';
+  const status = document.getElementById('apiCurrentStatus');
+  if(cur){
+    const masked = cur.slice(0,12)+'••••••••'+cur.slice(-4);
+    status.innerHTML=`<i class="ti ti-check" style="color:var(--success);font-size:11px"></i> 현재 저장된 키: <code style="background:var(--bg3);padding:1px 5px;border-radius:3px">${masked}</code>`;
+  } else {
+    status.innerHTML='<i class="ti ti-alert-triangle" style="color:var(--warn);font-size:11px"></i> 저장된 API 키 없음';
+  }
+  document.getElementById('apiModal').classList.add('open');
+  setTimeout(()=>inp.focus(),100);
+}
+function closeApiModal(){
+  document.getElementById('apiModal').classList.remove('open');
+}
+function saveApiModal(){
+  const v = document.getElementById('apiModalInput').value.trim();
+  if(!v){ toast('API 키를 입력하세요','err'); return; }
+  if(!v.startsWith('sk-')){
+    toast('올바른 API 키 형식이 아닙니다 (sk-... 로 시작)','err'); return;
+  }
+  localStorage.setItem('pfmea_apikey', v);
+  closeApiModal();
+  updateApiKeyBtn();
+  // 기존 apiBar 숨기기
+  const bar = document.getElementById('apiBar');
+  if(bar) bar.style.display='none';
+  toast('API 키 저장 완료','ok');
+}
+function deleteApiKey(){
+  if(!confirm('저장된 API 키를 삭제하시겠습니까?')) return;
+  localStorage.removeItem('pfmea_apikey');
+  closeApiModal();
+  updateApiKeyBtn();
+  toast('API 키 삭제됨','ok');
+}
+function toggleApiVis(){
+  const inp = document.getElementById('apiModalInput');
+  const icon = document.getElementById('apiVisIcon');
+  if(inp.type==='password'){
+    inp.type='text';
+    icon.className='ti ti-eye-off';
+  } else {
+    inp.type='password';
+    icon.className='ti ti-eye';
+  }
+}
+
+/* ─ Helpers ─ */
+function V(id){ return document.getElementById(id).value.trim(); }
+function toast(msg, type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className='toast show'+(type?' '+type:'');
+  clearTimeout(t._t);
+  t._t=setTimeout(()=>t.className='toast',2600);
+}
+
+/* ─ Sidebar toggle (mobile) ─ */
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+/* ─ Process list ─ */
+function renderList(){
+  const el=document.getElementById('procList');
+  if(!procs.length){
+    el.innerHTML='<div style="text-align:center;padding:24px 8px"><i class="ti ti-stack-2" style="font-size:26px;color:var(--text3);display:block;margin-bottom:6px"></i><p style="font-size:11px;color:var(--text3)">공정을 추가하면<br>목록이 표시됩니다</p></div>';
+    return;
+  }
+  el.innerHTML=procs.map((p,i)=>`
+    <div class="proc-item${i===cur?' active':''}" onclick="selProc(${i})">
+      <div class="pn">${p.num||`OP-${(i+1)*10}`}</div>
+      <div class="pname">${p.name}</div>
+      <div class="pstatus">
+        <div class="sdot ${p.status==='done'?'done':p.status==='analyzing'?'analyzing':p.status==='error'?'error':''}"></div>
+        <span class="stext">${
+          p.status==='done'?`PFMEA ${p.pfmea.length}행 · CP ${p.cp.length}행`:
+          p.status==='analyzing'?'AI 분석 중...':
+          p.status==='error'?'분석 실패':'대기'
+        }</span>
+        ${p.status==='done'?'<span class="ai-pill">AI</span>':''}
+        <button onclick="event.stopPropagation();deleteProc(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;margin-left:auto;font-size:13px;padding:0 2px" title="삭제"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selProc(i){
+  cur=i;
+  renderList();
+  renderContent();
+  // mobile: close sidebar
+  document.getElementById('sidebar').classList.remove('open');
+}
+
+function deleteProc(i){
+  if(!confirm(`"${procs[i].name}" 공정을 삭제하시겠습니까?`)) return;
+  procs.splice(i,1);
+  if(cur>=procs.length) cur=procs.length-1;
+  renderList();
+  if(cur>=0) selProc(cur); else renderWelcome();
+  saveAll();
+}
+
+function renderWelcome(){
+  document.getElementById('topTitle').textContent='공정을 선택하거나 추가하세요';
+  document.getElementById('btnXls').disabled=true;
+  document.getElementById('btnPdf').disabled=true;
+  document.getElementById('content').innerHTML=`
+    <div id="apiBar" style="display:none" class="api-bar">
+      <div style="flex:1">
+        <p><i class="ti ti-key" style="font-size:13px;margin-right:5px"></i><strong>Anthropic API 키 필요</strong></p>
+        <div class="api-input-row">
+          <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-...">
+          <button class="btn primary" onclick="saveApiKey()">저장</button>
+        </div>
+      </div>
+    </div>
+    <div class="empty">
+      <i class="ti ti-brain" style="color:var(--accent)"></i>
+      <h3>AI 기반 PFMEA / Control Plan</h3>
+      <p>왼쪽 패널에서 공정을 추가하고<br>도면을 업로드하면 AI가 자동 분석합니다<br><br>
+      <span style="font-size:11px;color:var(--text3)">AIAG-VDA 5th Edition 기준 · IATF 16949</span></p>
+    </div>`;
+  checkApiBar();
+}
+
+/* ─ Tab ─ */
+function switchTab(t){
+  tab=t;
+  document.getElementById('t-pfmea').className='tabx'+(t==='pfmea'?' on':'');
+  document.getElementById('t-cp').className='tabx'+(t==='cp'?' on':'');
+  renderContent();
+}
+
+/* ─ Content render ─ */
+function renderContent(){
+  if(cur<0){renderWelcome();return;}
+  const p=procs[cur];
+  document.getElementById('topTitle').textContent=`${p.num||''} ${p.name}`;
+  document.getElementById('btnXls').disabled=false;
+  document.getElementById('btnPdf').disabled=false;
+  const c=document.getElementById('content');
+
+  if(p.status==='analyzing'){
+    c.innerHTML=`
+      <div class="loading-box">
+        <div class="spinner"></div>
+        <p style="font-size:13px;color:var(--text2)">AI가 공정을 분석하고 있습니다...</p>
+        <p class="loading-step" id="lstep">잠재 고장모드 도출 중...</p>
+        <p style="font-size:11px;color:var(--text3);margin-top:4px">AIAG-VDA 5th Ed. 기준 적용</p>
+      </div>`;
+    return;
+  }
+  if(p.status==='error'){
+    c.innerHTML=`
+      <div class="empty">
+        <i class="ti ti-alert-circle" style="color:var(--danger)"></i>
+        <h3>분석 실패</h3>
+        <p>${p.errMsg||'API 오류가 발생했습니다'}<br>
+        <small style="color:var(--text3)">API 키를 확인하거나 잠시 후 재시도하세요</small></p>
+        <button class="btn primary" style="margin:14px auto 0;display:inline-flex" onclick="retryProc(${cur})">
+          <i class="ti ti-refresh" style="font-size:13px"></i> 재시도
+        </button>
+      </div>`;
+    return;
+  }
+  if(p.status==='done'){
+    if(tab==='pfmea') renderPFMEA(p,c);
+    else renderCP(p,c);
+  }
+}
+
+/* ─ PFMEA render ─ */
+function renderPFMEA(p,c){
+  const rows=p.pfmea||[];
+  const total=rows.length;
+  const avgRpn=total?Math.round(rows.reduce((s,r)=>s+rpn(r),0)/total):0;
+  const high=rows.filter(r=>rpn(r)>=200).length;
+  const needAct=rows.filter(r=>r.s>=7||r.o>=7||r.d>=7).length;
+  const svClass=s=>s>=9?'sv-x':s>=7?'sv-h':s>=4?'sv-m':'sv-l';
+  const rpnClass=v=>v>=200?'rpn-h':v>=100?'rpn-m':'rpn-l';
+
+  c.innerHTML=`
+  <div class="stats">
+    <div class="stat"><div class="stat-label">고장모드</div><div class="stat-val">${total}</div></div>
+    <div class="stat"><div class="stat-label">평균 RPN</div><div class="stat-val" style="color:${avgRpn>=200?'var(--danger)':avgRpn>=100?'var(--warn)':'var(--success)'}">${avgRpn}</div></div>
+    <div class="stat"><div class="stat-label">고위험 RPN (≥200)</div><div class="stat-val" style="color:var(--danger)">${high}</div></div>
+    <div class="stat"><div class="stat-label">7점이상 조치필수</div><div class="stat-val" style="color:${needAct>0?'var(--warn)':'var(--success)'}">${needAct}</div></div>
+  </div>
+  <div class="section">
+    <div class="section-head">
+      <h3>잠재 고장모드 분석 (PFMEA)</h3>
+      <span class="badge badge-ai"><i class="ti ti-sparkles" style="font-size:9px"></i> AI 생성</span>
+      <span class="badge badge-ok" style="margin-left:4px">셀 직접 편집 가능</span>
+    </div>
+    <div class="tbl-wrap">
+    <table style="width:max-content;min-width:100%">
+      <colgroup>
+        <col style="width:44px">   <!-- # -->
+        <col style="width:200px">  <!-- 고장모드 -->
+        <col style="width:200px">  <!-- 고장영향 -->
+        <col style="width:52px">   <!-- S -->
+        <col style="width:200px">  <!-- 잠재원인 -->
+        <col style="width:52px">   <!-- O -->
+        <col style="width:180px">  <!-- 현행관리 -->
+        <col style="width:52px">   <!-- D -->
+        <col style="width:64px">   <!-- RPN -->
+        <col style="width:220px">  <!-- 권장조치 -->
+        <col style="width:32px">   <!-- 삭제 -->
+      </colgroup>
+      <thead><tr>
+        <th>#</th>
+        <th>잠재 고장모드</th>
+        <th>고장 영향</th>
+        <th style="text-align:center">S</th>
+        <th>잠재 원인</th>
+        <th style="text-align:center">O</th>
+        <th>현행 관리방법</th>
+        <th style="text-align:center">D</th>
+        <th style="text-align:center">RPN</th>
+        <th>권장 조치사항</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="pfmeaTbody">
+      ${rows.map((r,ri)=>{
+        const rv=rpn(r);
+        const oColor=(r.o||0)>=7?'var(--danger)':(r.o||0)>=5?'var(--warn)':'#9ca3c0';
+        const dColor=(r.d||0)>=7?'var(--danger)':(r.d||0)>=5?'var(--warn)':'#9ca3c0';
+        return `<tr>
+          <td class="num-cell" style="color:var(--text3);font-size:11px">${ri+1}</td>
+          <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'fm',this)">${esc(r.fm)}</td>
+          <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'effect',this)">${esc(r.effect)}</td>
+          <td class="num-cell"><span class="sv ${svClass(r.s||1)}">${r.s||'-'}</span></td>
+          <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'cause',this)">${esc(r.cause)}</td>
+          <td class="num-cell" style="font-weight:700;font-size:14px;color:${oColor}">${r.o||'-'}</td>
+          <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'ctrl',this)">${esc(r.ctrl)}</td>
+          <td class="num-cell" style="font-weight:700;font-size:14px;color:${dColor}">${r.d||''}</td>
+          <td class="num-cell"><span class="rpn ${rpnClass(rv)}" style="font-size:14px;font-weight:700">${rv}</span></td>
+          <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'action',this)">${esc(r.action)}</td>
+          <td class="num-cell"><button onclick="delRow('pfmea',${ri})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px"><i class="ti ti-x"></i></button></td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:4px">
+    <button class="btn" onclick="addRow()"><i class="ti ti-plus" style="font-size:13px"></i> 행 추가</button>
+    <button class="btn primary" onclick="reanalyze(${cur})"><i class="ti ti-refresh" style="font-size:13px"></i> AI 재분석</button>
+  </div>`;
+}
+
+/* ─ Control Plan render ─ */
+function renderCP(p,c){
+  const rows=p.cp||[];
+  if(!rows.length){
+    c.innerHTML='<div class="empty"><i class="ti ti-table-off"></i><h3>Control Plan 데이터 없음</h3><p>PFMEA 탭에서 분석 완료 후 표시됩니다</p></div>';
+    return;
+  }
+  const charBadge=v=>{
+    if(!v||v==='일반') return `<span class="badge char-g" style="font-size:9px">일반</span>`;
+    if(v==='SC') return `<span class="badge char-sc" style="font-size:9px">SC</span>`;
+    return `<span class="badge char-cc" style="font-size:9px">CC</span>`;
+  };
+  c.innerHTML=`
+  <div class="section">
+    <div class="section-head">
+      <h3>Control Plan (관리 계획서)</h3>
+      <span class="badge badge-ai"><i class="ti ti-sparkles" style="font-size:9px"></i> AI 생성</span>
+      <span class="badge badge-ok" style="margin-left:4px">셀 직접 편집 가능</span>
+    </div>
+    <div class="tbl-wrap">
+    <table style="width:max-content;min-width:100%">
+      <colgroup>
+        <col style="width:70px">   <!-- 공정번호 -->
+        <col style="width:160px">  <!-- 공정명 -->
+        <col style="width:150px">  <!-- 기계/치공구 -->
+        <col style="width:52px">   <!-- 특성 -->
+        <col style="width:160px">  <!-- 관리특성 -->
+        <col style="width:130px">  <!-- 규격/공차 -->
+        <col style="width:140px">  <!-- 측정기법 -->
+        <col style="width:56px">   <!-- Size -->
+        <col style="width:80px">   <!-- 빈도 -->
+        <col style="width:140px">  <!-- 관리방법 -->
+        <col style="width:180px">  <!-- 반응계획 -->
+        <col style="width:32px">   <!-- 삭제 -->
+      </colgroup>
+      <thead><tr>
+        <th>공정번호</th>
+        <th>공정명/작업설명</th>
+        <th>기계/지그/치공구</th>
+        <th style="text-align:center">특성</th>
+        <th>관리 특성</th>
+        <th>규격/공차</th>
+        <th>측정기법</th>
+        <th style="text-align:center">Size</th>
+        <th style="text-align:center">빈도</th>
+        <th>관리방법</th>
+        <th style="min-width:120px">반응계획</th>
+        <th style="width:32px"></th>
+      </tr></thead>
+      <tbody>
+      ${rows.map((r,ri)=>`<tr>
+        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'pn',this)">${esc(r.pn||p.num)}</td>
+        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'op',this)">${esc(r.op||p.name)}</td>
+        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'mach',this)">${esc(r.mach)}</td>
+        <td style="text-align:center">${charBadge(r.char)}</td>
+        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'feat',this)">${esc(r.feat)}</td>
+        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'spec',this)">${esc(r.spec)}</td>
+        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'gage',this)">${esc(r.gage)}</td>
+        <td style="text-align:center" contenteditable="true" onblur="sc(${cur},'cp',${ri},'size',this)">${esc(r.size)}</td>
+        <td style="text-align:center" contenteditable="true" onblur="sc(${cur},'cp',${ri},'freq',this)">${esc(r.freq)}</td>
+        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'method',this)">${esc(r.method)}</td>
+        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'react',this)">${esc(r.react)}</td>
+        <td><button onclick="delCpRow(${ri})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px"><i class="ti ti-x"></i></button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:4px">
+    <button class="btn" onclick="addCpRow()"><i class="ti ti-plus" style="font-size:13px"></i> 행 추가</button>
+  </div>`;
+}
+
+/* ─ Cell save ─ */
+function sc(pi,type,ri,field,el){
+  if(procs[pi]&&procs[pi][type]&&procs[pi][type][ri])
+    procs[pi][type][ri][field]=el.textContent.trim();
+  saveAll();
+}
+function esc(s){ return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function rpn(r){ return (r.s||0)*(r.o||0)*(r.d||0); }
+
+function delRow(type,ri){ procs[cur][type].splice(ri,1); renderContent(); saveAll(); }
+function delCpRow(ri){ procs[cur].cp.splice(ri,1); renderContent(); saveAll(); }
+function addRow(){
+  procs[cur].pfmea.push({fm:'',effect:'',s:5,cause:'',o:3,ctrl:'검사',d:4,action:''});
+  renderContent(); saveAll();
+}
+function addCpRow(){
+  const p=procs[cur];
+  p.cp.push({pn:p.num,op:p.name,mach:'',char:'일반',feat:'',spec:'',gage:'',size:'5',freq:'초물/주물',method:'',react:''});
+  renderContent(); saveAll();
+}
+async function reanalyze(i){
+  procs[i].status='analyzing'; procs[i].pfmea=[]; procs[i].cp=[];
+  renderList(); renderContent();
+  await analyze(i);
+}
+async function retryProc(i){ await reanalyze(i); }
+
+/* ─ Project drawing upload (sidebar, shared across all processes) ─ */
+function onProjOver(e){ e.preventDefault(); document.getElementById('projUploadZone').classList.add('over'); }
+function onProjLeave(e){ document.getElementById('projUploadZone').classList.remove('over'); }
+function onProjDrop(e){
+  e.preventDefault();
+  document.getElementById('projUploadZone').classList.remove('over');
+  if(e.dataTransfer.files[0]) setProjFile(e.dataTransfer.files[0]);
+}
+function onProjFileSel(e){ if(e.target.files[0]) setProjFile(e.target.files[0]); }
+function setProjFile(file){
+  projFileType=file.type;
+  projFileName=file.name;
+  const reader=new FileReader();
+  reader.onload=(ev)=>{
+    projFileData=ev.target.result.split(',')[1];
+    const zone=document.getElementById('projUploadZone');
+    const thumb=document.getElementById('projThumb');
+    zone.style.display='none';
+    thumb.style.display='block';
+    const isImg=file.type.startsWith('image/');
+    thumb.innerHTML=`<div class="pdf-thumb" style="padding:8px 10px">
+      ${isImg
+        ? `<img src="${ev.target.result}" alt="도면" style="max-height:90px;width:100%;object-fit:contain;border-radius:3px;margin-bottom:4px">`
+        : `<i class="ti ti-file-type-pdf" style="font-size:22px;color:var(--danger);display:block;margin-bottom:4px"></i>`}
+      <div class="fname" style="font-size:10px">
+        <i class="ti ti-check" style="color:var(--success)"></i> ${file.name}<br>
+        <span style="color:var(--text3)">${(file.size/1024).toFixed(1)}KB · 전 공정 공통 적용</span>
+        <button onclick="clearProjFile()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:4px" title="도면 삭제"><i class="ti ti-x"></i></button>
+      </div>
+    </div>`;
+    updateModalDrawingStatus();
+    saveMeta();
+  };
+  reader.readAsDataURL(file);
+}
+function clearProjFile(){
+  projFileData=null; projFileType=null; projFileName=null;
+  document.getElementById('projUploadZone').style.display='block';
+  document.getElementById('projThumb').style.display='none';
+  document.getElementById('projThumb').innerHTML='';
+  document.getElementById('projFileIn').value='';
+  updateModalDrawingStatus();
+}
+function updateModalDrawingStatus(){
+  const el=document.getElementById('modalDrawingStatus');
+  if(!el) return;
+  if(projFileData){
+    el.innerHTML=`<i class="ti ti-check" style="color:var(--success);font-size:12px"></i> <span style="color:var(--success)">${projFileName}</span>`;
+  } else {
+    el.innerHTML=`<span style="color:var(--text3)">도면 없음</span>`;
+  }
+}
+
+/* ─ Legacy per-process file (kept for backward compat, not used in UI) ─ */
+function clearFile(){
+  upFile=null; upData=null; upType=null;
+}
+
+/* ─ Add process modal ─ */
+function openAdd(){
+  const n=procs.length;
+  setTimeout(updateModalDrawingStatus,50);
+  document.getElementById('nNum').value=`OP-${(n+1)*10}`;
+  document.getElementById('nName').value='';
+  document.getElementById('nFunc').value='';
+  document.getElementById('addModal').classList.add('open');
+}
+function closeAdd(){ document.getElementById('addModal').classList.remove('open'); }
+
+async function addProc(){
+  const num=document.getElementById('nNum').value.trim();
+  const name=document.getElementById('nName').value.trim();
+  const func=document.getElementById('nFunc').value.trim();
+  if(!name){ toast('공정명을 입력하세요','err'); return; }
+  if(!func){ toast('공정 기능/특성을 입력하세요','err'); return; }
+  if(!getKey()){ toast('API 키를 먼저 입력하세요','err'); return; }
+  closeAdd();
+  const proc={num,name,func,status:'analyzing',pfmea:[],cp:[]};
+  procs.push(proc);
+  cur=procs.length-1;
+  renderList(); renderContent();
+  await analyze(cur);
+}
+
+/* ─ AI Analysis ─ */
+const SYSTEM_PROMPT=`당신은 AIAG-VDA PFMEA 5th Edition 및 IATF 16949 Control Plan 전문가입니다.
+자동차 부품 생산공정의 PFMEA와 Control Plan을 한국어로 작성합니다.
+
+반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트나 마크다운 없이 순수 JSON만 출력:
+{
+  "pfmea": [
+    {
+      "fm": "잠재 고장모드",
+      "effect": "고장 영향",
+      "s": 심각도(1-10 정수),
+      "cause": "잠재 원인",
+      "o": 발생도(1-10 정수),
+      "ctrl": "현행 관리방법",
+      "d": 검출도(1-10 정수),
+      "action": "권장 조치사항"
+    }
+  ],
+  "cp": [
+    {
+      "pn": "공정번호",
+      "op": "공정명/작업설명",
+      "mach": "기계/지그/치공구",
+      "char": "SC 또는 CC 또는 일반",
+      "feat": "관리 특성",
+      "spec": "규격/공차",
+      "gage": "측정기법",
+      "size": "샘플크기",
+      "freq": "빈도",
+      "method": "관리방법",
+      "react": "반응계획"
+    }
+  ]
+}
+
+PFMEA 평가 기준:
+- 심각도(S) 9-10:안전/법규(부상 위험), 7-8:주요기능상실, 5-6:성능저하, 3-4:경미, 1-2:감지불가 영향
+- 발생도(O) 9-10:매우높음(>1/10), 7-8:높음(1/50), 5-6:보통(1/500), 3-4:낮음(1/2000), 1-2:매우낮음
+- 검출도(D) 9-10:검출불가, 7-8:낮음, 5-6:보통, 3-4:높음, 1-2:거의확실
+- 고장모드는 최소 6개 이상 도출, SC(안전특성)/CC(중요특성) 명확히 구분
+- 자동차 부품 실제 양산 현장 기준의 구체적인 내용으로 작성
+
+점수 부여 원칙 — 현실적이고 보수적으로 평가:
+- 실제 양산 공정에서 현행 관리방법(검사, SPC, Poka-Yoke 등)이 적용되고 있음을 전제
+- S(심각도): 안전·법규 직결이 아니면 9~10 부여 자제. 일반 품질 불량은 5~7 수준이 현실적
+- O(발생도): 현행 공정 관리가 있다면 1/500 이하 수준(5 이하)이 현실적. 잘 관리된 공정은 3~4
+- D(검출도): 정기 검사·작업자 육안·계측기 등 현행 관리가 있으면 4~6 수준이 현실적
+- 결과적으로 대부분의 RPN은 200 미만, 개별 S·O·D는 가급적 7 이하가 되도록 현실적으로 평가
+- 단, 안전특성(SC)이나 실제 고위험 항목은 정직하게 높게 평가
+
+중요 규칙 — 반드시 준수:
+1. S, O, D 중 하나라도 7점 이상이면 action 필드에 반드시 구체적인 권장 조치사항 작성 (빈 값 금지)
+2. S≥7: 설계변경, 공정변경, Fool-Proof 장치 등 근본 대책 제시
+3. O≥7: 공정 파라미터 관리 강화, SPC 도입, 작업 표준 강화 등 제시
+4. D≥7: 추가 검사 방법, 자동검사 도입, 검출 장치 개선 등 제시
+5. action은 "~을 검토한다" 같은 추상적 표현 금지, 구체적 실행 가능한 내용으로 작성`;
+
+/* ─ JSON repair utilities ─ */
+function repairJson(str){
+  // 잘린 JSON 자동 복구: 열린 괄호/문자열 닫기
+  let s = str;
+
+  // 마지막 완성된 객체까지만 남기기
+  // pfmea 배열과 cp 배열이 모두 있으면 그냥 시도
+  // 잘린 경우 열린 구조를 닫아줌
+  const stack = [];
+  let inStr = false, escaped = false;
+  let lastGoodPos = 0;
+
+  for(let i=0; i<s.length; i++){
+    const ch = s[i];
+    if(escaped){ escaped=false; continue; }
+    if(ch==='\\'){ escaped=true; continue; }
+    if(ch==='"'){
+      inStr=!inStr;
+      if(!inStr) lastGoodPos=i;
+      continue;
+    }
+    if(inStr) continue;
+    if(ch==='{'||ch==='[') stack.push(ch);
+    else if(ch==='}'||ch===']'){
+      stack.pop();
+      if(stack.length===0) lastGoodPos=i;
+    }
+  }
+
+  // 잘렸으면 복구 시도
+  if(stack.length>0){
+    // 마지막 완전한 객체 뒤까지 자름
+    // 열린 배열/객체 닫기
+    let fixed = s;
+    // 마지막 쉼표 뒤 불완전 객체 제거
+    fixed = fixed.replace(/,\s*\{[^}]*$/, '');
+    fixed = fixed.replace(/,\s*"[^"]*$/, '');
+    fixed = fixed.replace(/"[^"]*$/, '"...(잘림)"');
+    // 닫기
+    const closing = [...stack].reverse().map(c=>c==='{'?'}':']').join('');
+    fixed = fixed + closing;
+    return fixed;
+  }
+  return s;
+}
+
+function extractPartialJson(str){
+  // pfmea 배열만이라도 추출
+  const result = { pfmea:[], cp:[] };
+  try{
+    const pm = str.match(/"pfmea"\s*:\s*(\[[\s\S]*?\])\s*[,}]/);
+    if(pm) result.pfmea = JSON.parse(pm[1]);
+  }catch(e){}
+  try{
+    const cm = str.match(/"cp"\s*:\s*(\[[\s\S]*?\])\s*[,}]/);
+    if(cm) result.cp = JSON.parse(cm[1]);
+  }catch(e){}
+  return result;
+}
+
+function buildPrompt(p){
+  return `공정 정보:
+- 공정번호: ${p.num||'N/A'}
+- 공정명: ${p.name}
+- 공정 기능/특성: ${p.func}
+${p.fileData?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악하여 ':''}
+이 공정에 대한 PFMEA와 Control Plan을 AIAG-VDA 5th Edition 기준으로 작성해주세요.
+실제 자동차 부품 양산 현장에서 발생 가능한 구체적인 내용으로 전문적으로 작성하세요.`;
+}
+
+async function analyze(idx){
+  const p=procs[idx];
+  const steps=['잠재 고장모드 도출 중...','고장 영향 및 심각도(S) 평가 중...','잠재 원인 및 발생도(O) 분석 중...','현행 관리방법 및 검출도(D) 평가 중...','권장 조치사항 도출 중...','Control Plan 항목 생성 중...'];
+  let si=0;
+  const iv=setInterval(()=>{
+    const el=document.getElementById('lstep');
+    if(el&&si<steps.length) el.textContent=steps[si++];
+  },1800);
+
+  try{
+    // 프로젝트 공통 도면 우선, 없으면 공정별 도면
+    const drawingData = projFileData || p.fileData;
+    const drawingType = projFileType || p.fileType;
+    const isImg=drawingType&&drawingType.startsWith('image/');
+    const isPdf=drawingType==='application/pdf';
+    const content=[];
+    if(drawingData&&(isImg||isPdf)){
+      content.push({
+        type:isPdf?'document':'image',
+        source:{type:'base64',media_type:drawingType,data:drawingData}
+      });
+    }
+    content.push({type:'text',text:buildPrompt(p)});
+
+    const res=await fetch(API_URL,{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key':getKey(),
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:'claude-sonnet-4-5',
+        max_tokens:8000,
+        system:SYSTEM_PROMPT,
+        messages:[{role:'user',content}]
+      })
+    });
+    clearInterval(iv);
+    if(!res.ok){
+      const e=await res.json().catch(()=>({error:{message:`HTTP ${res.status}`}}));
+      throw new Error(e.error?.message||`HTTP ${res.status}`);
+    }
+    const data=await res.json();
+    const text=data.content.map(c=>c.text||'').join('');
+    let clean=text.replace(/```json\n?/g,'').replace(/```/g,'').trim();
+
+    // JSON이 잘렸을 경우 자동 복구
+    clean = repairJson(clean);
+
+    let parsed;
+    try{
+      parsed=JSON.parse(clean);
+    }catch(je){
+      // 복구 실패 시 pfmea/cp 각각 추출 시도
+      parsed = extractPartialJson(clean);
+      if(!parsed.pfmea.length) throw new Error('JSON 파싱 실패 — 재시도해주세요');
+    }
+    procs[idx].pfmea=parsed.pfmea||[];
+    procs[idx].cp=parsed.cp||[];
+    procs[idx].status='done';
+    procs[idx].fileData=null;
+    renderList(); renderContent(); saveAll();
+    toast(`${p.name} 분석 완료 — ${procs[idx].pfmea.length}개 고장모드`,'ok');
+  }catch(e){
+    clearInterval(iv);
+    procs[idx].status='error';
+    procs[idx].errMsg=e.message;
+    renderList(); renderContent(); saveAll();
+    toast('분석 실패: '+e.message,'err');
+  }
+}
+
+/* ─ Export Excel ─ */
+function exportExcel(){
+  if(!procs.some(p=>p.status==='done')){ toast('분석된 공정이 없습니다','err'); return; }
+  const wb=XLSX.utils.book_new();
+  const pn=V('partNum')||'N/A', pname=V('partName')||'N/A';
+  const cust=V('customer')||'', plant=V('plant')||'';
+  const pfNo=V('pfmeaNo')||'', date=new Date().toLocaleDateString('ko-KR');
+
+  // PFMEA sheet
+  const rows1=[
+    [`PFMEA  품번: ${pn}  품명: ${pname}`,'','','','','','','','','',''],
+    [`고객사: ${cust}  공장: ${plant}  PFMEA No.: ${pfNo}  작성일: ${date}`,'','','','','','','','','',''],
+    [],
+    ['공정번호','공정명','잠재 고장모드','잠재 고장영향','심각도(S)','잠재 원인','발생도(O)','현행 관리방법','검출도(D)','RPN','권장 조치사항']
+  ];
+  procs.forEach(p=>{
+    (p.pfmea||[]).forEach(r=>{
+      rows1.push([p.num||'',p.name,r.fm,r.effect,r.s,r.cause,r.o,r.ctrl,r.d,rpn(r),r.action]);
+    });
+  });
+  const ws1=XLSX.utils.aoa_to_sheet(rows1);
+  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:10}},{s:{r:1,c:0},e:{r:1,c:10}}];
+  ws1['!cols']=[10,16,24,22,8,24,8,22,8,8,26].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws1,'PFMEA');
+
+  // CP sheet
+  const rows2=[
+    [`Control Plan  품번: ${pn}  품명: ${pname}`,'','','','','','','','','',''],
+    [`고객사: ${cust}  공장: ${plant}  작성일: ${date}`,'','','','','','','','','',''],
+    [],
+    ['공정번호','공정명/작업설명','기계/지그/치공구','특성구분','관리특성','규격/공차','측정기법','샘플크기','빈도','관리방법','반응계획']
+  ];
+  procs.forEach(p=>{
+    (p.cp||[]).forEach(r=>{
+      rows2.push([r.pn||p.num,r.op||p.name,r.mach,r.char,r.feat,r.spec,r.gage,r.size,r.freq,r.method,r.react]);
+    });
+  });
+  const ws2=XLSX.utils.aoa_to_sheet(rows2);
+  ws2['!merges']=[{s:{r:0,c:0},e:{r:0,c:10}},{s:{r:1,c:0},e:{r:1,c:10}}];
+  ws2['!cols']=[10,18,18,8,18,14,16,8,10,16,22].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws2,'Control Plan');
+
+  XLSX.writeFile(wb,`PFMEA_CP_${pn}_${date.replace(/\./g,'')}.xlsx`);
+  toast('Excel 다운로드 완료','ok');
+}
+
+/* ─ Export PDF ─ */
+function exportPDF(){
+  if(!procs.some(p=>p.status==='done')){ toast('분석된 공정이 없습니다','err'); return; }
+  try{
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a3'});
+    const pn=V('partNum')||'N/A', pname=V('partName')||'N/A';
+    const cust=V('customer')||'', date=new Date().toLocaleDateString('ko-KR');
+
+    // PFMEA page
+    doc.setFillColor(30,33,64); doc.rect(0,0,420,12,'F');
+    doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(220,225,255);
+    doc.text(`PFMEA  |  ${pname} (${pn})`,8,8);
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(160,165,200);
+    doc.text(`Customer: ${cust}   Date: ${date}   AIAG-VDA 5th Ed. / IATF 16949`,8,11.5);
+
+    const pd=[];
+    procs.forEach(p=>{
+      (p.pfmea||[]).forEach(r=>{
+        const rv=rpn(r);
+        pd.push([p.num||'',p.name,r.fm||'',r.effect||'',r.s||'',r.cause||'',r.o||'',r.ctrl||'',r.d||'',rv,r.action||'']);
+      });
+    });
+
+    doc.autoTable({
+      startY:14,
+      head:[['OP#','공정명','고장모드','고장영향','S','잠재원인','O','현행관리','D','RPN','권장조치']],
+      body:pd,
+      styles:{fontSize:7,cellPadding:1.5,lineColor:[50,55,85],lineWidth:.2,textColor:[200,205,225]},
+      headStyles:{fillColor:[30,33,64],textColor:[160,170,220],fontStyle:'bold',fontSize:7},
+      alternateRowStyles:{fillColor:[20,23,40]},
+      bodyStyles:{fillColor:[15,17,30]},
+      columnStyles:{
+        0:{cellWidth:12},1:{cellWidth:22},2:{cellWidth:30},3:{cellWidth:28},
+        4:{cellWidth:8,halign:'center'},5:{cellWidth:30},6:{cellWidth:8,halign:'center'},
+        7:{cellWidth:26},8:{cellWidth:8,halign:'center'},9:{cellWidth:12,halign:'center'},10:{cellWidth:28}
+      },
+      didParseCell:(data)=>{
+        if(data.column.index===9&&data.section==='body'){
+          const v=parseInt(data.cell.raw)||0;
+          data.cell.styles.fontStyle='bold';
+          data.cell.styles.textColor=v>=200?[220,60,60]:v>=100?[200,140,20]:[40,180,80];
+        }
+        if(data.column.index===4&&data.section==='body'){
+          const v=parseInt(data.cell.raw)||0;
+          data.cell.styles.fontStyle='bold';
+          data.cell.styles.textColor=v>=9?[220,60,60]:v>=7?[200,140,20]:[160,165,200];
+        }
+      }
+    });
+
+    // CP page
+    doc.addPage();
+    doc.setFillColor(15,80,50); doc.rect(0,0,420,12,'F');
+    doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(180,255,210);
+    doc.text(`Control Plan  |  ${pname} (${pn})`,8,8);
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(120,200,155);
+    doc.text(`Customer: ${cust}   Date: ${date}   IATF 16949`,8,11.5);
+
+    const cd=[];
+    procs.forEach(p=>{
+      (p.cp||[]).forEach(r=>{
+        cd.push([r.pn||p.num,r.op||p.name,r.mach||'',r.char||'',r.feat||'',r.spec||'',r.gage||'',r.size||'',r.freq||'',r.method||'',r.react||'']);
+      });
+    });
+
+    doc.autoTable({
+      startY:14,
+      head:[['OP#','공정명','기계/치공구','구분','관리특성','규격','측정기법','Size','빈도','관리방법','반응계획']],
+      body:cd,
+      styles:{fontSize:7,cellPadding:1.5,lineColor:[20,65,45],lineWidth:.2,textColor:[200,225,210]},
+      headStyles:{fillColor:[15,80,50],textColor:[160,240,190],fontStyle:'bold',fontSize:7},
+      alternateRowStyles:{fillColor:[18,35,26]},
+      bodyStyles:{fillColor:[12,25,20]},
+      columnStyles:{
+        0:{cellWidth:12},1:{cellWidth:24},2:{cellWidth:20},3:{cellWidth:10,halign:'center'},
+        4:{cellWidth:24},5:{cellWidth:18},6:{cellWidth:20},7:{cellWidth:12,halign:'center'},
+        8:{cellWidth:14,halign:'center'},9:{cellWidth:22},10:{cellWidth:26}
+      },
+      didParseCell:(data)=>{
+        if(data.column.index===3&&data.section==='body'){
+          const v=data.cell.raw||'';
+          if(v==='SC') data.cell.styles.textColor=[220,60,60];
+          else if(v==='CC') data.cell.styles.textColor=[200,140,20];
+        }
+      }
+    });
+
+    doc.save(`PFMEA_CP_${pn}_${date.replace(/\./g,'')}.pdf`);
+    toast('PDF 다운로드 완료','ok');
+  }catch(e){
+    toast('PDF 오류: '+e.message,'err');
+  }
+}
+
+/* ─ Init ─ */
+loadAll();
+renderList();
+if(procs.length>0){ selProc(cur>=0?cur:0); } else { renderWelcome(); }
+checkApiBar();
+updateApiKeyBtn();
+</script>
+</body>
+</html>
