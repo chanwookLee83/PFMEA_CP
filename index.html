@@ -17,7 +17,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
 <style>
 /* ── Reset & Variables ─────────────────────────────── */
@@ -352,8 +352,8 @@ td[contenteditable="true"]:focus{
       <input id="partName" placeholder="예) 커넥터 브라켓" oninput="saveMeta()">
       <label>고객사</label>
       <input id="customer" placeholder="예) Hyundai MOBIS" oninput="saveMeta()">
-      <label>회사명/부서</label>
-      <input id="plant" placeholder="예)미래/생산기술" oninput="saveMeta()">
+      <label>공장</label>
+      <input id="plant" placeholder="예) 창원 1공장" oninput="saveMeta()">
       <label>PFMEA No.</label>
       <input id="pfmeaNo" placeholder="예) PFMEA-2025-001" oninput="saveMeta()">
       <label style="margin-top:10px">프로젝트 도면 (전 공정 공통)</label>
@@ -1247,98 +1247,134 @@ function exportExcel(){
   toast('Excel 다운로드 완료','ok');
 }
 
-/* ─ Export PDF ─ */
-function exportPDF(){
+/* ─ Export PDF (html2canvas — 한글 인코딩 정상 처리) ─ */
+async function exportPDF(){
   if(!procs.some(p=>p.status==='done')){ toast('분석된 공정이 없습니다','err'); return; }
+  const btn=document.getElementById('btnPdf');
+  const origHTML=btn?btn.innerHTML:'';
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2" style="font-size:13px;animation:spin .7s linear infinite"></i> 생성 중...'; }
   try{
     const {jsPDF}=window.jspdf;
-    const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a3'});
     const pn=V('partNum')||'N/A', pname=V('partName')||'N/A';
     const cust=V('customer')||'', date=new Date().toLocaleDateString('ko-KR');
+    const TH=`padding:5px 7px;border:1px solid #aaa;font-weight:700;white-space:nowrap;font-size:8px`;
+    const THB=TH+';background:#1e2140;color:#c0c8ff';
+    const THG=TH+';background:#0f5035;color:#a0ffd5';
+    const TD=`padding:4px 6px;border:1px solid #ddd;vertical-align:top;font-size:8px;word-break:break-all`;
+    const TDC=TD+';text-align:center;font-weight:bold';
 
-    // PFMEA page
-    doc.setFillColor(30,33,64); doc.rect(0,0,420,12,'F');
-    doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(220,225,255);
-    doc.text(`PFMEA  |  ${pname} (${pn})`,8,8);
-    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(160,165,200);
-    doc.text(`Customer: ${cust}   Date: ${date}   AIAG-VDA 5th Ed. / IATF 16949`,8,11.5);
+    const pfmeaBody=procs.flatMap(p=>(p.pfmea||[]).map((r,i)=>{
+      const rv=rpn(r);
+      const rc=rv>=200?'#dc2626':rv>=100?'#d97706':'#15803d';
+      const sc=(r.s||0)>=9?'#dc2626':(r.s||0)>=7?'#d97706':'#222';
+      const bg=i%2===0?'#f0f2ff':'#fff';
+      return `<tr style="background:${bg}">
+        <td style="${TD}">${esc(p.num||'')}</td><td style="${TD}">${esc(p.name)}</td>
+        <td style="${TD}">${esc(r.fm||'')}</td><td style="${TD}">${esc(r.effect||'')}</td>
+        <td style="${TDC};color:${sc}">${r.s||''}</td>
+        <td style="${TD}">${esc(r.cause||'')}</td>
+        <td style="${TDC}">${r.o||''}</td>
+        <td style="${TD}">${esc(r.ctrl||'')}</td>
+        <td style="${TDC}">${r.d||''}</td>
+        <td style="${TDC};color:${rc}">${rv}</td>
+        <td style="${TD}">${esc(r.action||'')}</td>
+      </tr>`;
+    })).join('');
 
-    const pd=[];
-    procs.forEach(p=>{
-      (p.pfmea||[]).forEach(r=>{
-        const rv=rpn(r);
-        pd.push([p.num||'',p.name,r.fm||'',r.effect||'',r.s||'',r.cause||'',r.o||'',r.ctrl||'',r.d||'',rv,r.action||'']);
-      });
+    const cpBody=procs.flatMap(p=>(p.cp||[]).map((r,i)=>{
+      const cc=r.char==='SC'?'#dc2626':r.char==='CC'?'#d97706':'#222';
+      const bg=i%2===0?'#f0fff8':'#fff';
+      return `<tr style="background:${bg}">
+        <td style="${TD}">${esc(r.pn||p.num)}</td><td style="${TD}">${esc(r.op||p.name)}</td>
+        <td style="${TD}">${esc(r.mach||'')}</td>
+        <td style="${TDC};color:${cc}">${esc(r.char||'')}</td>
+        <td style="${TD}">${esc(r.feat||'')}</td><td style="${TD}">${esc(r.spec||'')}</td>
+        <td style="${TD}">${esc(r.gage||'')}</td>
+        <td style="${TDC}">${esc(r.size||'')}</td>
+        <td style="${TDC}">${esc(r.freq||'')}</td>
+        <td style="${TD}">${esc(r.method||'')}</td>
+        <td style="${TD}">${esc(r.react||'')}</td>
+      </tr>`;
+    })).join('');
+
+    const markup=`<div style="font-family:'Malgun Gothic','맑은 고딕','Apple SD Gothic Neo','Noto Sans KR',Arial,sans-serif;background:#fff;color:#111;padding:20px;width:1380px">
+      <div style="background:#1e2140;color:#dce0ff;padding:7px 14px;margin-bottom:6px;border-radius:4px;display:flex;justify-content:space-between;align-items:center">
+        <strong style="font-size:13px">PFMEA</strong>
+        <span style="font-size:9px">${esc(pname)} (${esc(pn)}) &nbsp;|&nbsp; ${esc(cust)} &nbsp;|&nbsp; ${date} &nbsp;|&nbsp; AIAG-VDA 5th Ed. / IATF 16949</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:18px;table-layout:fixed">
+        <colgroup>
+          <col style="width:5%"><col style="width:8%"><col style="width:11%"><col style="width:10%">
+          <col style="width:3%"><col style="width:11%"><col style="width:3%"><col style="width:9%">
+          <col style="width:3%"><col style="width:4%"><col style="width:13%">
+        </colgroup>
+        <thead><tr>
+          <th style="${THB}">공정번호</th><th style="${THB}">공정명</th><th style="${THB}">잠재 고장모드</th>
+          <th style="${THB}">고장 영향</th><th style="${THB}">S</th><th style="${THB}">잠재 원인</th>
+          <th style="${THB}">O</th><th style="${THB}">현행 관리방법</th><th style="${THB}">D</th>
+          <th style="${THB}">RPN</th><th style="${THB}">권장 조치사항</th>
+        </tr></thead>
+        <tbody>${pfmeaBody}</tbody>
+      </table>
+      <div style="background:#0f5035;color:#b0ffd5;padding:7px 14px;margin-bottom:6px;border-radius:4px;display:flex;justify-content:space-between;align-items:center">
+        <strong style="font-size:13px">Control Plan</strong>
+        <span style="font-size:9px">${esc(pname)} (${esc(pn)}) &nbsp;|&nbsp; ${esc(cust)} &nbsp;|&nbsp; ${date} &nbsp;|&nbsp; IATF 16949</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+        <colgroup>
+          <col style="width:5%"><col style="width:9%"><col style="width:8%"><col style="width:4%">
+          <col style="width:9%"><col style="width:7%"><col style="width:8%"><col style="width:4%">
+          <col style="width:5%"><col style="width:8%"><col style="width:11%">
+        </colgroup>
+        <thead><tr>
+          <th style="${THG}">공정번호</th><th style="${THG}">공정명</th><th style="${THG}">기계/치공구</th>
+          <th style="${THG}">특성</th><th style="${THG}">관리특성</th><th style="${THG}">규격/공차</th>
+          <th style="${THG}">측정기법</th><th style="${THG}">Size</th><th style="${THG}">빈도</th>
+          <th style="${THG}">관리방법</th><th style="${THG}">반응계획</th>
+        </tr></thead>
+        <tbody>${cpBody}</tbody>
+      </table>
+    </div>`;
+
+    const wrap=document.createElement('div');
+    wrap.style.cssText='position:fixed;top:0;left:-9999px;z-index:-1;background:#fff';
+    wrap.innerHTML=markup;
+    document.body.appendChild(wrap);
+    await document.fonts.ready;
+
+    const canvas=await html2canvas(wrap.firstElementChild,{
+      scale:1.5, useCORS:true, backgroundColor:'#ffffff', logging:false, width:1380
     });
+    document.body.removeChild(wrap);
 
-    doc.autoTable({
-      startY:14,
-      head:[['OP#','공정명','고장모드','고장영향','S','잠재원인','O','현행관리','D','RPN','권장조치']],
-      body:pd,
-      styles:{fontSize:7,cellPadding:1.5,lineColor:[50,55,85],lineWidth:.2,textColor:[200,205,225]},
-      headStyles:{fillColor:[30,33,64],textColor:[160,170,220],fontStyle:'bold',fontSize:7},
-      alternateRowStyles:{fillColor:[20,23,40]},
-      bodyStyles:{fillColor:[15,17,30]},
-      columnStyles:{
-        0:{cellWidth:12},1:{cellWidth:22},2:{cellWidth:30},3:{cellWidth:28},
-        4:{cellWidth:8,halign:'center'},5:{cellWidth:30},6:{cellWidth:8,halign:'center'},
-        7:{cellWidth:26},8:{cellWidth:8,halign:'center'},9:{cellWidth:12,halign:'center'},10:{cellWidth:28}
-      },
-      didParseCell:(data)=>{
-        if(data.column.index===9&&data.section==='body'){
-          const v=parseInt(data.cell.raw)||0;
-          data.cell.styles.fontStyle='bold';
-          data.cell.styles.textColor=v>=200?[220,60,60]:v>=100?[200,140,20]:[40,180,80];
-        }
-        if(data.column.index===4&&data.section==='body'){
-          const v=parseInt(data.cell.raw)||0;
-          data.cell.styles.fontStyle='bold';
-          data.cell.styles.textColor=v>=9?[220,60,60]:v>=7?[200,140,20]:[160,165,200];
-        }
+    const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a3'});
+    const pageW=420, pageH=297, mg=8;
+    const availW=pageW-mg*2, availH=pageH-mg*2;
+    const sc=availW/canvas.width;
+    const totalH=canvas.height*sc;
+
+    if(totalH<=availH){
+      doc.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',mg,mg,availW,totalH);
+    }else{
+      const slicePx=Math.floor(availH/sc);
+      let yPx=0, pg=0;
+      while(yPx<canvas.height){
+        if(pg>0) doc.addPage();
+        const h=Math.min(slicePx, canvas.height-yPx);
+        const c2=document.createElement('canvas');
+        c2.width=canvas.width; c2.height=h;
+        c2.getContext('2d').drawImage(canvas,0,yPx,canvas.width,h,0,0,canvas.width,h);
+        doc.addImage(c2.toDataURL('image/jpeg',0.93),'JPEG',mg,mg,availW,h*sc);
+        yPx+=h; pg++;
       }
-    });
-
-    // CP page
-    doc.addPage();
-    doc.setFillColor(15,80,50); doc.rect(0,0,420,12,'F');
-    doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(180,255,210);
-    doc.text(`Control Plan  |  ${pname} (${pn})`,8,8);
-    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(120,200,155);
-    doc.text(`Customer: ${cust}   Date: ${date}   IATF 16949`,8,11.5);
-
-    const cd=[];
-    procs.forEach(p=>{
-      (p.cp||[]).forEach(r=>{
-        cd.push([r.pn||p.num,r.op||p.name,r.mach||'',r.char||'',r.feat||'',r.spec||'',r.gage||'',r.size||'',r.freq||'',r.method||'',r.react||'']);
-      });
-    });
-
-    doc.autoTable({
-      startY:14,
-      head:[['OP#','공정명','기계/치공구','구분','관리특성','규격','측정기법','Size','빈도','관리방법','반응계획']],
-      body:cd,
-      styles:{fontSize:7,cellPadding:1.5,lineColor:[20,65,45],lineWidth:.2,textColor:[200,225,210]},
-      headStyles:{fillColor:[15,80,50],textColor:[160,240,190],fontStyle:'bold',fontSize:7},
-      alternateRowStyles:{fillColor:[18,35,26]},
-      bodyStyles:{fillColor:[12,25,20]},
-      columnStyles:{
-        0:{cellWidth:12},1:{cellWidth:24},2:{cellWidth:20},3:{cellWidth:10,halign:'center'},
-        4:{cellWidth:24},5:{cellWidth:18},6:{cellWidth:20},7:{cellWidth:12,halign:'center'},
-        8:{cellWidth:14,halign:'center'},9:{cellWidth:22},10:{cellWidth:26}
-      },
-      didParseCell:(data)=>{
-        if(data.column.index===3&&data.section==='body'){
-          const v=data.cell.raw||'';
-          if(v==='SC') data.cell.styles.textColor=[220,60,60];
-          else if(v==='CC') data.cell.styles.textColor=[200,140,20];
-        }
-      }
-    });
+    }
 
     doc.save(`PFMEA_CP_${pn}_${date.replace(/\./g,'')}.pdf`);
     toast('PDF 다운로드 완료','ok');
   }catch(e){
     toast('PDF 오류: '+e.message,'err');
+  }finally{
+    if(btn){ btn.disabled=false; btn.innerHTML=origHTML; }
   }
 }
 
