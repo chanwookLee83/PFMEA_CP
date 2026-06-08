@@ -384,6 +384,9 @@ td[contenteditable="true"]:focus{
         <button class="tabx" id="t-cp" onclick="switchTab('cp')">Control Plan</button>
       </div>
       <div class="export-grp">
+        <button class="btn" id="btnTpl" onclick="document.getElementById('tplFileIn').click()" style="padding:5px 9px" title="Excel 양식 업로드"><i class="ti ti-table-import" id="tplIcon" style="font-size:14px"></i></button>
+        <button id="btnTplClear" class="btn" onclick="clearTemplate()" style="display:none;padding:5px 8px" title="양식 제거"><i class="ti ti-x" style="font-size:12px"></i></button>
+        <input type="file" id="tplFileIn" accept=".xlsx,.xls" style="display:none" onchange="onTplFileSel(event)">
         <button class="btn" id="btnXls" onclick="exportExcel()" disabled><i class="ti ti-file-spreadsheet" style="font-size:13px"></i> Excel</button>
         <button class="btn" id="btnPdf" onclick="exportPDF()" disabled><i class="ti ti-file-type-pdf" style="font-size:13px"></i> PDF</button>
         <button class="btn" id="btnApiKey" onclick="openApiModal()" title="API 키 변경" style="padding:5px 9px"><i class="ti ti-key" style="font-size:14px"></i></button>
@@ -499,6 +502,7 @@ let cur = -1;
 let tab = 'pfmea';
 let upFile = null, upData = null, upType = null;
 let projFileData = null, projFileType = null, projFileName = null;
+let tplWorkbook = null, tplFileName = null;
 
 /* ─ Persist ─ */
 function saveAll(){
@@ -1204,6 +1208,7 @@ async function analyze(idx){
 /* ─ Export Excel ─ */
 function exportExcel(){
   if(!procs.some(p=>p.status==='done')){ toast('분석된 공정이 없습니다','err'); return; }
+  if(tplWorkbook){ exportExcelWithTpl(); return; }
   const wb=XLSX.utils.book_new();
   const pn=V('partNum')||'N/A', pname=V('partName')||'N/A';
   const cust=V('customer')||'', plant=V('plant')||'';
@@ -1376,6 +1381,218 @@ async function exportPDF(){
   }finally{
     if(btn){ btn.disabled=false; btn.innerHTML=origHTML; }
   }
+}
+
+/* ─ Excel Template ─ */
+const PFMEA_COL_KW={
+  pNum: ['공정번호','op#','op no','process no','공정 번호'],
+  pName:['공정명','공정 명','process name'],
+  fm:   ['고장모드','잠재 고장모드','failure mode','고장 모드'],
+  effect:['고장영향','고장 영향','잠재 고장영향','effect'],
+  s:    ['심각도','severity'],
+  cause:['잠재원인','잠재 원인','원인','cause'],
+  o:    ['발생도','occurrence'],
+  ctrl: ['현행관리','현행 관리','현행관리방법','현행관리 방법','control'],
+  d:    ['검출도','detection'],
+  rpn:  ['rpn'],
+  action:['권장조치','조치사항','권장 조치','action','개선조치','개선사항']
+};
+const CP_COL_KW={
+  pn:    ['공정번호','op#','공정 번호'],
+  op:    ['공정명','작업설명','공정명/작업설명','operation'],
+  mach:  ['기계','치공구','지그','machine','기계/지그','기계/치공구'],
+  char:  ['특성','특성구분','구분','characteristic'],
+  feat:  ['관리특성','관리 특성','feature','특성명'],
+  spec:  ['규격','공차','규격/공차','specification'],
+  gage:  ['측정기법','게이지','측정방법','gage','measurement','측정 기법'],
+  size:  ['샘플크기','size','샘플 크기','sample'],
+  freq:  ['빈도','frequency','측정빈도'],
+  method:['관리방법','관리 방법','method'],
+  react: ['반응계획','반응 계획','reaction plan','reaction']
+};
+
+function tplDetectHeaderRow(ws,kwMap){
+  const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
+  let best={row:range.s.r, score:0};
+  for(let r=range.s.r; r<=Math.min(range.e.r, range.s.r+30); r++){
+    let score=0;
+    for(let c=range.s.c; c<=Math.min(range.e.c, range.s.c+40); c++){
+      const cell=ws[XLSX.utils.encode_cell({r,c})];
+      if(!cell) continue;
+      const t=String(cell.v||'').toLowerCase().replace(/\s+/g,' ').trim();
+      if(!t) continue;
+      for(const kws of Object.values(kwMap)){
+        if(kws.some(k=>t.includes(k))){ score++; break; }
+      }
+    }
+    if(score>best.score) best={row:r, score};
+  }
+  return best.score>=2 ? best.row : -1;
+}
+
+function tplMapCols(ws,hr,kwMap){
+  const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
+  const map={};
+  for(let c=range.s.c; c<=Math.min(range.e.c, range.s.c+40); c++){
+    const cell=ws[XLSX.utils.encode_cell({r:hr,c})];
+    if(!cell) continue;
+    const t=String(cell.v||'').toLowerCase().replace(/\s+/g,' ').trim();
+    for(const [f,kws] of Object.entries(kwMap)){
+      if(map[f]!==undefined) continue;
+      if(kws.some(k=>t.includes(k))) map[f]=c;
+    }
+  }
+  return map;
+}
+
+function tplCloneSheet(ws){
+  const out={};
+  for(const k of Object.keys(ws)){
+    try{ out[k]=JSON.parse(JSON.stringify(ws[k])); }catch{ out[k]=ws[k]; }
+  }
+  return out;
+}
+
+function tplFindSheet(wb,terms){
+  for(const name of wb.SheetNames){
+    const n=name.toLowerCase().replace(/\s+/g,'');
+    if(terms.some(t=>n.includes(t.toLowerCase().replace(/\s+/g,'')))) return name;
+  }
+  return null;
+}
+
+function tplFillSheet(ws,hr,colMap,rows,type){
+  const start=hr+1;
+  const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
+  // 기존 데이터 행 삭제 (매핑된 컬럼 기준)
+  const mappedCols=Object.values(colMap);
+  for(let r=start; r<=range.e.r+1; r++){
+    let hasContent=mappedCols.some(c=>{
+      const cell=ws[XLSX.utils.encode_cell({r,c})];
+      return cell&&cell.v!==''&&cell.v!==undefined;
+    });
+    if(!hasContent) break;
+    mappedCols.forEach(c=>{ delete ws[XLSX.utils.encode_cell({r,c})]; });
+  }
+  // 데이터 삽입
+  rows.forEach(({proc:p,data:d},i)=>{
+    const r=start+i;
+    const set=(f,v)=>{
+      if(colMap[f]===undefined) return;
+      ws[XLSX.utils.encode_cell({r,c:colMap[f]})]={v,t:typeof v==='number'?'n':'s'};
+    };
+    if(type==='pfmea'){
+      set('pNum',p.num||''); set('pName',p.name);
+      set('fm',d.fm||''); set('effect',d.effect||'');
+      set('s',d.s||0); set('cause',d.cause||'');
+      set('o',d.o||0); set('ctrl',d.ctrl||'');
+      set('d',d.d||0); set('rpn',rpn(d)); set('action',d.action||'');
+    } else {
+      set('pn',d.pn||p.num); set('op',d.op||p.name);
+      set('mach',d.mach||''); set('char',d.char||'');
+      set('feat',d.feat||''); set('spec',d.spec||'');
+      set('gage',d.gage||''); set('size',d.size||'');
+      set('freq',d.freq||''); set('method',d.method||'');
+      set('react',d.react||'');
+    }
+  });
+  // !ref 범위 갱신
+  if(rows.length>0){
+    range.e.r=Math.max(range.e.r, start+rows.length-1);
+    ws['!ref']=XLSX.utils.encode_range(range);
+  }
+}
+
+function onTplFileSel(e){
+  if(e.target.files[0]){ loadTemplate(e.target.files[0]); e.target.value=''; }
+}
+function loadTemplate(file){
+  const reader=new FileReader();
+  reader.onload=(ev)=>{
+    try{
+      tplWorkbook=XLSX.read(ev.target.result,{type:'binary'});
+      tplFileName=file.name;
+      updateTplBtn();
+      toast(`양식 로드: ${file.name}`,'ok');
+    }catch(e){ toast('양식 읽기 오류: '+e.message,'err'); }
+  };
+  reader.readAsBinaryString(file);
+}
+function clearTemplate(){
+  tplWorkbook=null; tplFileName=null;
+  updateTplBtn();
+  toast('양식 초기화됨','ok');
+}
+function updateTplBtn(){
+  const icon=document.getElementById('tplIcon');
+  const btn=document.getElementById('btnTpl');
+  const clr=document.getElementById('btnTplClear');
+  if(!icon) return;
+  if(tplWorkbook){
+    icon.className='ti ti-table-check';
+    if(btn){ btn.style.color='var(--success)'; btn.title=`양식: ${tplFileName} (클릭 시 변경)`; }
+    if(clr) clr.style.display='';
+  } else {
+    icon.className='ti ti-table-import';
+    if(btn){ btn.style.color=''; btn.title='Excel 양식 업로드'; }
+    if(clr) clr.style.display='none';
+  }
+}
+
+function exportExcelWithTpl(){
+  const wb=XLSX.utils.book_new();
+  for(const name of tplWorkbook.SheetNames){
+    XLSX.utils.book_append_sheet(wb, tplCloneSheet(tplWorkbook.Sheets[name]), name);
+  }
+  const pfmeaRows=procs.flatMap(p=>(p.pfmea||[]).map(d=>({proc:p,data:d})));
+  const cpRows=procs.flatMap(p=>(p.cp||[]).map(d=>({proc:p,data:d})));
+  let pfmeaOk=false, cpOk=false;
+
+  // 이름으로 시트 찾기
+  const pfmeaSN=tplFindSheet(wb,['pfmea','고장모드분석','고장분석','fmea']);
+  if(pfmeaSN){
+    const ws=wb.Sheets[pfmeaSN];
+    const hr=tplDetectHeaderRow(ws,PFMEA_COL_KW);
+    if(hr>=0){ const cm=tplMapCols(ws,hr,PFMEA_COL_KW); tplFillSheet(ws,hr,cm,pfmeaRows,'pfmea'); pfmeaOk=true; }
+  }
+  const cpSN=tplFindSheet(wb,['control plan','controlplan','cp','관리계획','관리계획서']);
+  if(cpSN){
+    const ws=wb.Sheets[cpSN];
+    const hr=tplDetectHeaderRow(ws,CP_COL_KW);
+    if(hr>=0){ const cm=tplMapCols(ws,hr,CP_COL_KW); tplFillSheet(ws,hr,cm,cpRows,'cp'); cpOk=true; }
+  }
+
+  // 이름으로 못 찾으면 전체 시트 내용 스캔
+  if(!pfmeaOk||!cpOk){
+    for(const name of wb.SheetNames){
+      if(name===pfmeaSN||name===cpSN) continue;
+      const ws=wb.Sheets[name];
+      if(!pfmeaOk){
+        const hr=tplDetectHeaderRow(ws,PFMEA_COL_KW);
+        if(hr>=0){
+          const cm=tplMapCols(ws,hr,PFMEA_COL_KW);
+          if(Object.keys(cm).length>=4){ tplFillSheet(ws,hr,cm,pfmeaRows,'pfmea'); pfmeaOk=true; }
+        }
+      }
+      if(!cpOk){
+        const hr=tplDetectHeaderRow(ws,CP_COL_KW);
+        if(hr>=0){
+          const cm=tplMapCols(ws,hr,CP_COL_KW);
+          if(Object.keys(cm).length>=4){ tplFillSheet(ws,hr,cm,cpRows,'cp'); cpOk=true; }
+        }
+      }
+    }
+  }
+
+  if(!pfmeaOk&&!cpOk){
+    toast('양식에서 PFMEA/CP 헤더를 찾을 수 없습니다. 헤더 행에 "고장모드", "발생도", "관리특성" 등의 키워드가 있어야 합니다.','err');
+    return;
+  }
+  const pn=V('partNum')||'N/A';
+  const date=new Date().toLocaleDateString('ko-KR');
+  XLSX.writeFile(wb,`PFMEA_CP_${pn}_${date.replace(/\./g,'')}.xlsx`);
+  const note=(!pfmeaOk?' ※PFMEA 미감지':'')+(!cpOk?' ※CP 미감지':'');
+  toast('Excel 다운로드 완료 (양식 사용)'+note, pfmeaOk||cpOk?'ok':'err');
 }
 
 /* ─ Init ─ */
