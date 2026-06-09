@@ -324,6 +324,25 @@ td[contenteditable="true"]:focus{
 }
 .api-input-row input:focus{border-color:var(--accent)}
 
+/* ── Equip type toggle ───────────────────────────────────── */
+.equip-toggle{display:flex;gap:6px;margin-top:4px}
+.equip-btn{
+  flex:1;padding:7px 0;border:1.5px solid var(--border2);
+  border-radius:var(--r);background:var(--bg3);color:var(--text2);
+  cursor:pointer;font-size:12px;font-weight:500;transition:.15s;
+  display:flex;align-items:center;justify-content:center;gap:5px
+}
+.equip-btn:hover{border-color:var(--accent);color:var(--accent)}
+.equip-btn.sel-auto{background:rgba(61,99,245,.1);border-color:var(--accent);color:var(--accent);font-weight:700}
+.equip-btn.sel-manual{background:rgba(245,158,11,.1);border-color:var(--warn);color:var(--warn);font-weight:700}
+.kw-tag{
+  display:inline-flex;align-items:center;gap:3px;
+  background:var(--bg4);border:1px solid var(--border2);
+  border-radius:20px;padding:2px 8px;font-size:11px;color:var(--text2);
+  margin:2px;cursor:pointer;transition:.12s
+}
+.kw-tag:hover{background:rgba(61,99,245,.15);border-color:var(--accent);color:var(--accent)}
+
 /* ── Responsive ──────────────────────────────────────── */
 @media(max-width:768px){
   .sidebar{position:fixed;left:0;top:0;height:100%;z-index:100;transform:translateX(-100%)}
@@ -444,6 +463,23 @@ td[contenteditable="true"]:focus{
         placeholder="예) φ8.5 드릴 가공, 깊이 12±0.1mm&#10;진위치도 ⌀0.05, 표면 Ra1.6&#10;재질: SPCC t1.5, 가공온도 상온&#10;특별특성: 구멍 위치도 SC"></textarea>
     </div>
 
+    <div class="fblock">
+      <label>장비 타입</label>
+      <div class="equip-toggle">
+        <button type="button" class="equip-btn sel-auto" id="nEquipAuto" onclick="setEquip('auto')">
+          <i class="ti ti-robot" style="font-size:13px"></i> AUTO (자동설비)
+        </button>
+        <button type="button" class="equip-btn" id="nEquipManual" onclick="setEquip('manual')">
+          <i class="ti ti-hand-finger" style="font-size:13px"></i> Manual (수동)
+        </button>
+      </div>
+    </div>
+    <div class="fblock">
+      <label>AI 분석 키워드 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(클릭하여 빠른 추가 · 직접 입력도 가능)</span></label>
+      <div id="nKwSuggest" style="margin-bottom:6px;line-height:1.8"></div>
+      <input id="nKeywords" placeholder="예) SPC, Poka-Yoke, 용접전류, 토크, 비전검사"
+             style="font-size:12px" oninput="updateKwSuggest('add')">
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeAdd()">취소</button>
       <button class="btn primary" onclick="addProc()">
@@ -453,6 +489,59 @@ td[contenteditable="true"]:focus{
   </div>
 </div>
 
+
+<!-- ── Edit Process Modal ── -->
+<div class="backdrop" id="editModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3><i class="ti ti-edit" style="color:var(--accent);margin-right:7px"></i>공정 수정</h3>
+      <button onclick="closeEdit()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="row2">
+      <div class="fblock">
+        <label>공정 번호</label>
+        <input id="eNum" placeholder="예) OP-10">
+      </div>
+      <div class="fblock">
+        <label>공정명 *</label>
+        <input id="eName" placeholder="예) 프레스 가공">
+      </div>
+    </div>
+    <div class="fblock">
+      <label>공정 기능 / 특성 *</label>
+      <textarea id="eFunc" rows="4"
+        placeholder="예) φ8.5 드릴 가공, 깊이 12±0.1mm&#10;진위치도 ⌀0.05, 표면 Ra1.6"></textarea>
+    </div>
+    <div class="fblock">
+      <label>장비 타입</label>
+      <div class="equip-toggle">
+        <button type="button" class="equip-btn sel-auto" id="eEquipAuto" onclick="setEditEquip('auto')">
+          <i class="ti ti-robot" style="font-size:13px"></i> AUTO (자동설비)
+        </button>
+        <button type="button" class="equip-btn" id="eEquipManual" onclick="setEditEquip('manual')">
+          <i class="ti ti-hand-finger" style="font-size:13px"></i> Manual (수동)
+        </button>
+      </div>
+    </div>
+    <div class="fblock">
+      <label>AI 분석 키워드</label>
+      <div id="eKwSuggest" style="margin-bottom:6px;line-height:1.8"></div>
+      <input id="eKeywords" placeholder="예) SPC, Poka-Yoke, 용접전류, 토크, 비전검사"
+             style="font-size:12px" oninput="updateKwSuggest('edit')">
+    </div>
+    <div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:var(--r);padding:8px 12px;margin-bottom:4px;font-size:11px;color:var(--warn);display:flex;align-items:center;gap:7px">
+      <i class="ti ti-alert-triangle" style="font-size:13px;flex-shrink:0"></i>
+      저장 후 AI 재분석을 실행하면 변경된 내용으로 새로 분석됩니다.
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeEdit()">취소</button>
+      <button class="btn" onclick="saveEdit(false)"><i class="ti ti-check" style="font-size:13px"></i> 저장만</button>
+      <button class="btn primary" onclick="saveEdit(true)">
+        <i class="ti ti-refresh" style="font-size:13px"></i> 저장 + AI 재분석
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- API Key Modal -->
 <div class="backdrop" id="apiModal">
@@ -648,6 +737,7 @@ function renderList(){
           p.status==='error'?'분석 실패':'대기'
         }</span>
         ${p.status==='done'?'<span class="ai-pill">AI</span>':''}
+        <button onclick="event.stopPropagation();openEdit(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0 2px" title="수정"><i class="ti ti-pencil"></i></button>
         <button onclick="event.stopPropagation();deleteProc(${i})" style="background:none;border:none;color:var(--text3);cursor:pointer;margin-left:auto;font-size:13px;padding:0 2px" title="삭제"><i class="ti ti-trash"></i></button>
       </div>
     </div>
@@ -911,6 +1001,44 @@ function addCpRow(){
   p.cp.push({pn:p.num,op:p.name,mach:'',char:'일반',feat:'',spec:'',gage:'',size:'5',freq:'초물/주물',method:'',react:''});
   renderContent(); saveAll();
 }
+/* ─ Edit Process Modal ─ */
+function openEdit(i){
+  const p=procs[i];
+  document.getElementById('eNum').value=p.num||'';
+  document.getElementById('eName').value=p.name||'';
+  document.getElementById('eFunc').value=p.func||'';
+  document.getElementById('eKeywords').value=p.keywords||'';
+  setEditEquip(p.equipType||'auto');
+  updateKwSuggest('edit');
+  document.getElementById('editModal')._editIdx=i;
+  document.getElementById('editModal').classList.add('open');
+}
+function closeEdit(){ document.getElementById('editModal').classList.remove('open'); }
+function saveEdit(rerun){
+  const modal=document.getElementById('editModal');
+  const i=modal._editIdx;
+  if(i===undefined||i<0) return;
+  const name=document.getElementById('eName').value.trim();
+  const func=document.getElementById('eFunc').value.trim();
+  if(!name){ toast('공정명을 입력하세요','err'); return; }
+  if(!func){ toast('공정 기능/특성을 입력하세요','err'); return; }
+  procs[i].num=document.getElementById('eNum').value.trim();
+  procs[i].name=name;
+  procs[i].func=func;
+  procs[i].equipType=document.getElementById('eEquipAuto').classList.contains('sel-auto')?'auto':'manual';
+  procs[i].keywords=document.getElementById('eKeywords').value.trim();
+  closeEdit();
+  saveAll();
+  renderList();
+  if(rerun){
+    if(!getKey()){ toast('API 키를 먼저 입력하세요','err'); return; }
+    reanalyze(i);
+  } else {
+    if(cur===i) renderContent();
+    toast(`${name} 공정 정보 수정 완료`,'ok');
+  }
+}
+
 async function reanalyze(i){
   procs[i].status='analyzing'; procs[i].pfmea=[]; procs[i].cp=[];
   renderList(); renderContent();
@@ -1005,19 +1133,60 @@ function openAdd(){
   document.getElementById('nNum').value=`OP-${(n+1)*10}`;
   document.getElementById('nName').value='';
   document.getElementById('nFunc').value='';
+  document.getElementById('nKeywords').value='';
+  setEquip('auto');
+  updateKwSuggest('add');
   document.getElementById('addModal').classList.add('open');
 }
 function closeAdd(){ document.getElementById('addModal').classList.remove('open'); }
-
+// 장비타입 선택 (추가 모달)
+function setEquip(type){
+  const a=document.getElementById('nEquipAuto');
+  const m=document.getElementById('nEquipManual');
+  a.className='equip-btn'+(type==='auto'?' sel-auto':'');
+  m.className='equip-btn'+(type==='manual'?' sel-manual':'');
+  updateKwSuggest('add');
+}
+// 수정 모달 장비타입
+function setEditEquip(type){
+  const a=document.getElementById('eEquipAuto');
+  const m=document.getElementById('eEquipManual');
+  a.className='equip-btn'+(type==='auto'?' sel-auto':'');
+  m.className='equip-btn'+(type==='manual'?' sel-manual':'');
+  updateKwSuggest('edit');
+}
+// 키워드 추천 태그
+const KW_AUTO=['SPC','Poka-Yoke','비전검사','토크관리','전류모니터링','자동배출','센서검출','작업표준','자동정지','용접조건','압입하중','에러프루핑'];
+const KW_MANUAL=['작업자 숙련도','목시검사','토크렌치','게이지','작업표준서','3정5행','자주검사','이상처리','설비점검','한도샘플','체크시트','작업지도서'];
+function updateKwSuggest(mode){
+  const prefix=mode==='add'?'n':'e';
+  const isAuto=document.getElementById(prefix+'EquipAuto')?.classList.contains('sel-auto');
+  const pool=isAuto?KW_AUTO:KW_MANUAL;
+  const inp=document.getElementById(prefix+'Keywords');
+  const box=document.getElementById(prefix+'KwSuggest');
+  if(!box||!inp) return;
+  const already=inp.value.split(',').map(s=>s.trim().toLowerCase());
+  const remaining=pool.filter(k=>!already.includes(k.toLowerCase()));
+  box.innerHTML=remaining.map(k=>`<span class="kw-tag" onclick="addKwTag('${mode}','${k}')">${k}</span>`).join('');
+}
+function addKwTag(mode,kw){
+  const prefix=mode==='add'?'n':'e';
+  const inp=document.getElementById(prefix+'Keywords');
+  const cur=inp.value.trim();
+  inp.value=cur?(cur+', '+kw):kw;
+  updateKwSuggest(mode);
+}
 async function addProc(){
   const num=document.getElementById('nNum').value.trim();
   const name=document.getElementById('nName').value.trim();
   const func=document.getElementById('nFunc').value.trim();
+  const equipType=document.getElementById('nEquipAuto').classList.contains('sel-auto')?'auto':'manual';
+  const keywords=document.getElementById('nKeywords').value.trim();
   if(!name){ toast('공정명을 입력하세요','err'); return; }
   if(!func){ toast('공정 기능/특성을 입력하세요','err'); return; }
   if(!getKey()){ toast('API 키를 먼저 입력하세요','err'); return; }
   closeAdd();
-  const proc={num,name,func,status:'analyzing',pfmea:[],cp:[]};
+  const proc={num,name,func,equipType,keywords,status:'analyzing',pfmea:[],cp:[]};
   procs.push(proc);
   cur=procs.length-1;
   renderList(); renderContent();
@@ -1142,11 +1311,14 @@ function extractPartialJson(str){
 }
 
 function buildPrompt(p){
+  const equipLabel=p.equipType==='manual'?'Manual(수동) 공정 — 작업자 개입, 육안검사, 인적오류 중심으로 분석':'AUTO(자동설비) 공정 — 설비 파라미터, 센서, 자동검출, PLC 에러 중심으로 분석';
+  const kwLine=p.keywords?`\n- 핵심 키워드 / 관리포인트: ${p.keywords}`:'';
   return `공정 정보:
 - 공정번호: ${p.num||'N/A'}
 - 공정명: ${p.name}
 - 공정 기능/특성: ${p.func}
-${p.fileData?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악하여 ':''}
+- 장비 타입: ${equipLabel}${kwLine}
+${p.fileData||projFileData?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악하여 ':''}
 이 공정에 대한 PFMEA와 Control Plan을 AIAG-VDA 5th Edition 기준으로 작성해주세요.
 실제 자동차 부품 양산 현장에서 발생 가능한 구체적인 내용으로 전문적으로 작성하세요.`;
 }
