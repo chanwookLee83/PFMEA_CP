@@ -396,6 +396,61 @@ td[contenteditable="true"]:focus{
   display:flex;align-items:center;gap:8px;
   font-size:11px;color:var(--accent2);padding:6px 0
 }
+
+/* ── Drawing Viewer ──────────────────────────────────────── */
+.drw-viewer{
+  position:fixed;inset:0;z-index:9000;
+  background:rgba(8,12,28,.96);display:none;
+  flex-direction:column;backdrop-filter:blur(2px)
+}
+.drw-viewer.open{display:flex}
+.drw-viewer-bar{
+  height:48px;background:rgba(255,255,255,.06);
+  border-bottom:1px solid rgba(255,255,255,.08);
+  display:flex;align-items:center;padding:0 14px;gap:8px;
+  flex-shrink:0;user-select:none
+}
+.drw-viewer-title{
+  flex:1;font-size:13px;font-weight:500;color:rgba(255,255,255,.85);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.drw-vbtn{
+  width:32px;height:32px;border-radius:6px;border:none;
+  background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);
+  cursor:pointer;font-size:15px;display:flex;align-items:center;
+  justify-content:center;transition:.12s;flex-shrink:0
+}
+.drw-vbtn:hover{background:rgba(255,255,255,.18);color:#fff}
+.drw-vbtn.danger:hover{background:rgba(239,68,68,.3);color:#ff8080}
+.zoom-label{
+  font-size:12px;color:rgba(255,255,255,.55);
+  min-width:44px;text-align:center;font-family:monospace
+}
+.drw-viewer-body{
+  flex:1;overflow:hidden;position:relative;
+  display:flex;align-items:center;justify-content:center
+}
+/* image viewer */
+.drw-img-wrap{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;cursor:grab
+}
+.drw-img-wrap.grabbing{cursor:grabbing}
+.drw-img-wrap img{
+  transform-origin:0 0;user-select:none;pointer-events:none;
+  display:block;max-width:none
+}
+/* PDF viewer */
+.drw-pdf-wrap{width:100%;height:100%}
+.drw-pdf-wrap iframe{width:100%;height:100%;border:none;background:#fff}
+/* thumbnail strip (future) */
+.drw-hint{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.5);border-radius:20px;padding:4px 12px;
+  font-size:11px;color:rgba(255,255,255,.45);pointer-events:none;
+  white-space:nowrap
+}
 /* ── Responsive ──────────────────────────────────────── */
 @media(max-width:768px){
   .sidebar{position:fixed;left:0;top:0;height:100%;z-index:100;transform:translateX(-100%)}
@@ -608,6 +663,7 @@ td[contenteditable="true"]:focus{
     </div>
     <div class="modal-actions" style="margin-top:14px">
       <button class="btn" onclick="closeDrwModal()">닫기</button>
+      <button class="btn" onclick="closeDrwModal();openViewer()"><i class="ti ti-zoom-in" style="font-size:13px"></i> 도면 원본 보기</button>
       <button class="btn primary" onclick="reAnalyzeDrawing()"><i class="ti ti-refresh" style="font-size:13px"></i> 재분석</button>
     </div>
   </div>
@@ -1258,6 +1314,154 @@ function renderDrwModal(){
   `;
 }
 
+
+/* ─ Drawing Viewer ─ */
+let _vScale=1, _vOx=0, _vOy=0;
+let _vDragging=false, _vLx=0, _vLy=0;
+let _vPdfUrl=null;
+
+function openViewer(){
+  if(!projFileData){ toast('도면이 없습니다','err'); return; }
+  const isImg=projFileType&&projFileType.startsWith('image/');
+  const isPdf=projFileType==='application/pdf';
+  const viewer=document.getElementById('drwViewer');
+  const imgWrap=document.getElementById('imgWrap');
+  const pdfWrap=document.getElementById('pdfWrap');
+  document.getElementById('viewerTitle').textContent=projFileName||'도면';
+  if(isImg){
+    imgWrap.style.display='flex';
+    pdfWrap.style.display='none';
+    const img=document.getElementById('viewerImg');
+    img.src=projDrawingDataUrl||`data:${projFileType};base64,${projFileData}`;
+    img.onload=()=>{ viewerFit(); };
+    document.getElementById('viewerZoomCtrl').style.display='flex';
+    document.getElementById('viewerHint').textContent='휠: 확대/축소  ·  드래그: 이동';
+    _vScale=1; _vOx=0; _vOy=0;
+  } else if(isPdf){
+    imgWrap.style.display='none';
+    pdfWrap.style.display='block';
+    document.getElementById('viewerZoomCtrl').style.display='none';
+    document.getElementById('viewerHint').textContent='';
+    // blob URL 생성 (data URL보다 안정적)
+    if(_vPdfUrl) URL.revokeObjectURL(_vPdfUrl);
+    const bytes=atob(projFileData);
+    const arr=new Uint8Array(bytes.length);
+    for(let i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
+    const blob=new Blob([arr],{type:'application/pdf'});
+    _vPdfUrl=URL.createObjectURL(blob);
+    document.getElementById('viewerPdf').src=_vPdfUrl+'#toolbar=1&navpanes=0';
+  }
+  viewer.classList.add('open');
+  document.addEventListener('keydown', _viewerKey);
+}
+function closeViewer(){
+  document.getElementById('drwViewer').classList.remove('open');
+  document.removeEventListener('keydown', _viewerKey);
+  if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+}
+function _viewerKey(e){
+  if(e.key==='Escape') closeViewer();
+  else if(e.key==='+'||e.key==='=') viewerZoom(+0.15);
+  else if(e.key==='-') viewerZoom(-0.15);
+  else if(e.key==='f'||e.key==='F') viewerFit();
+  else if(e.key==='1') viewerActual();
+}
+function _applyTransform(){
+  const img=document.getElementById('viewerImg');
+  const wrap=document.getElementById('imgWrap');
+  const ww=wrap.clientWidth, wh=wrap.clientHeight;
+  const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+  const cx=ww/2+_vOx, cy=wh/2+_vOy;
+  const ox=cx-iw*_vScale/2, oy=cy-ih*_vScale/2;
+  img.style.transform=`translate(${ox}px,${oy}px) scale(${_vScale})`;
+  document.getElementById('zoomLabel').textContent=Math.round(_vScale*100)+'%';
+}
+function viewerZoom(delta){
+  const prev=_vScale;
+  _vScale=Math.min(Math.max(_vScale+delta,0.1),8);
+  // offset 조정: 화면 중앙 기준 유지
+  _vOx*=_vScale/prev; _vOy*=_vScale/prev;
+  _applyTransform();
+}
+function viewerFit(){
+  const img=document.getElementById('viewerImg');
+  const wrap=document.getElementById('imgWrap');
+  const ww=wrap.clientWidth, wh=wrap.clientHeight;
+  const iw=img.naturalWidth||800, ih=img.naturalHeight||600;
+  _vScale=Math.min((ww-40)/iw,(wh-40)/ih,2);
+  _vOx=0; _vOy=0;
+  _applyTransform();
+}
+function viewerActual(){ _vScale=1; _vOx=0; _vOy=0; _applyTransform(); }
+function toggleViewerFull(){
+  const el=document.getElementById('drwViewer');
+  const icon=document.getElementById('viewerFullIcon');
+  if(!document.fullscreenElement){
+    el.requestFullscreen().catch(()=>{});
+    icon.className='ti ti-minimize';
+  } else {
+    document.exitFullscreen().catch(()=>{});
+    icon.className='ti ti-maximize';
+  }
+}
+// 마우스 휠 확대/축소
+document.addEventListener('DOMContentLoaded',()=>{
+  const wrap=document.getElementById('imgWrap');
+  wrap.addEventListener('wheel',(e)=>{
+    if(!document.getElementById('drwViewer').classList.contains('open')) return;
+    e.preventDefault();
+    const delta=e.deltaY<0?0.12:-0.12;
+    const prev=_vScale;
+    _vScale=Math.min(Math.max(_vScale+delta,0.1),8);
+    // 마우스 위치 기준 확대
+    const rect=wrap.getBoundingClientRect();
+    const mx=e.clientX-rect.left-rect.width/2;
+    const my=e.clientY-rect.top-rect.height/2;
+    _vOx=mx-(_vScale/prev)*(mx-_vOx);
+    _vOy=my-(_vScale/prev)*(my-_vOy);
+    _applyTransform();
+  },{passive:false});
+  // 드래그 패닝
+  wrap.addEventListener('mousedown',(e)=>{
+    if(!document.getElementById('drwViewer').classList.contains('open')) return;
+    _vDragging=true; _vLx=e.clientX; _vLy=e.clientY;
+    wrap.classList.add('grabbing');
+  });
+  document.addEventListener('mousemove',(e)=>{
+    if(!_vDragging) return;
+    _vOx+=e.clientX-_vLx; _vOy+=e.clientY-_vLy;
+    _vLx=e.clientX; _vLy=e.clientY;
+    _applyTransform();
+  });
+  document.addEventListener('mouseup',()=>{
+    _vDragging=false;
+    document.getElementById('imgWrap').classList.remove('grabbing');
+  });
+  // 터치 지원 (핀치 줌)
+  let _tDist=0;
+  wrap.addEventListener('touchstart',(e)=>{
+    if(e.touches.length===2){
+      _tDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    } else if(e.touches.length===1){
+      _vDragging=true; _vLx=e.touches[0].clientX; _vLy=e.touches[0].clientY;
+    }
+  },{passive:true});
+  wrap.addEventListener('touchmove',(e)=>{
+    if(e.touches.length===2){
+      const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      const ratio=d/_tDist; _tDist=d;
+      const prev=_vScale; _vScale=Math.min(Math.max(_vScale*ratio,0.1),8);
+      _vOx*=_vScale/prev; _vOy*=_vScale/prev;
+      _applyTransform();
+    } else if(_vDragging&&e.touches.length===1){
+      _vOx+=e.touches[0].clientX-_vLx; _vOy+=e.touches[0].clientY-_vLy;
+      _vLx=e.touches[0].clientX; _vLy=e.touches[0].clientY;
+      _applyTransform();
+    }
+  },{passive:true});
+  wrap.addEventListener('touchend',()=>{ _vDragging=false; });
+});
+
 async function reanalyze(i){
   procs[i].status='analyzing'; procs[i].pfmea=[]; procs[i].cp=[];
   renderList(); renderContent();
@@ -1307,10 +1511,11 @@ function renderDrawingThumb(dataUrl, type, name, sizeStr){
       <button onclick="clearProjFile()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:4px" title="도면 삭제"><i class="ti ti-x"></i></button>
     </div>
     <div class="analyze-btn-row" id="drwAnalyzeRow">
+      <button class="btn" style="flex:1;font-size:11px;padding:5px 8px" onclick="openViewer()"><i class="ti ti-zoom-in" style="font-size:12px"></i> 도면 보기</button>
       ${hasDrw
-        ? `<button class="btn" style="flex:1;font-size:11px;padding:5px 8px" onclick="openDrwModal()"><i class="ti ti-eye" style="font-size:12px"></i> 분석 결과 보기</button>
+        ? `<button class="btn" style="flex:1;font-size:11px;padding:5px 8px" onclick="openDrwModal()"><i class="ti ti-eye" style="font-size:12px"></i> 분석 결과</button>
            <button class="btn" style="font-size:11px;padding:5px 8px" onclick="startDrawingAnalysis()" title="재분석"><i class="ti ti-refresh" style="font-size:12px"></i></button>`
-        : `<button class="btn primary" style="flex:1;font-size:11px;padding:5px 8px" onclick="startDrawingAnalysis()"><i class="ti ti-brain" style="font-size:12px"></i> AI 도면 분석</button>`}
+        : `<button class="btn" style="flex:1;font-size:11px;padding:5px 8px" onclick="startDrawingAnalysis()"><i class="ti ti-brain" style="font-size:12px"></i> AI 분석</button>`}
     </div>
   </div>`;
   updateModalDrawingStatus();
@@ -1832,5 +2037,30 @@ idbGet('proj_drawing').then(saved=>{
   if(projFileData) renderDrawingThumb(projDrawingDataUrl, projFileType, projFileName, '저장됨');
 }).catch(()=>{});
 </script>
+
+<!-- ── Drawing Viewer ── -->
+<div class="drw-viewer" id="drwViewer">
+  <div class="drw-viewer-bar">
+    <button class="drw-vbtn" onclick="closeViewer()" title="닫기 (Esc)"><i class="ti ti-x"></i></button>
+    <span class="drw-viewer-title" id="viewerTitle">도면</span>
+    <div style="display:flex;align-items:center;gap:4px" id="viewerZoomCtrl">
+      <button class="drw-vbtn" onclick="viewerZoom(-0.15)" title="축소 (-)"><i class="ti ti-zoom-out"></i></button>
+      <span class="zoom-label" id="zoomLabel">100%</span>
+      <button class="drw-vbtn" onclick="viewerZoom(+0.15)" title="확대 (+)"><i class="ti ti-zoom-in"></i></button>
+      <button class="drw-vbtn" onclick="viewerFit()" title="화면 맞춤 (F)"><i class="ti ti-aspect-ratio"></i></button>
+      <button class="drw-vbtn" onclick="viewerActual()" title="원본 크기 (1)"><i class="ti ti-zoom-check"></i></button>
+    </div>
+    <button class="drw-vbtn" onclick="toggleViewerFull()" title="전체화면" style="margin-left:4px"><i class="ti ti-maximize" id="viewerFullIcon"></i></button>
+  </div>
+  <div class="drw-viewer-body" id="viewerBody">
+    <div class="drw-img-wrap" id="imgWrap">
+      <img id="viewerImg" src="" alt="도면" draggable="false">
+    </div>
+    <div class="drw-pdf-wrap" id="pdfWrap" style="display:none">
+      <iframe id="viewerPdf" title="도면 PDF"></iframe>
+    </div>
+    <span class="drw-hint" id="viewerHint">휠: 확대/축소 &nbsp;·&nbsp; 드래그: 이동</span>
+  </div>
+</div>
 </body>
 </html>
