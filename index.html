@@ -918,6 +918,21 @@ async function reanalyze(i){
 }
 async function retryProc(i){ await reanalyze(i); }
 
+/* ─ IndexedDB helpers (도면 영구 저장) ─ */
+let _idb=null;
+function openDB(){
+  return new Promise((res,rej)=>{
+    if(_idb){res(_idb);return;}
+    const r=indexedDB.open('pfmea_db',1);
+    r.onupgradeneeded=e=>e.target.result.createObjectStore('files');
+    r.onsuccess=e=>{_idb=e.target.result;res(_idb);};
+    r.onerror=()=>rej(r.error);
+  });
+}
+function idbSet(key,val){return openDB().then(db=>new Promise((res,rej)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').put(val,key);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);}));}
+function idbGet(key){return openDB().then(db=>new Promise((res,rej)=>{const tx=db.transaction('files','readonly');const r=tx.objectStore('files').get(key);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}));}
+function idbDel(key){return openDB().then(db=>new Promise((res,rej)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').delete(key);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);}));}
+
 /* ─ Project drawing upload (sidebar, shared across all processes) ─ */
 function onProjOver(e){ e.preventDefault(); document.getElementById('projUploadZone').classList.add('over'); }
 function onProjLeave(e){ document.getElementById('projUploadZone').classList.remove('over'); }
@@ -927,34 +942,41 @@ function onProjDrop(e){
   if(e.dataTransfer.files[0]) setProjFile(e.dataTransfer.files[0]);
 }
 function onProjFileSel(e){ if(e.target.files[0]) setProjFile(e.target.files[0]); }
+
+function renderDrawingThumb(dataUrl, type, name, sizeStr){
+  const zone=document.getElementById('projUploadZone');
+  const thumb=document.getElementById('projThumb');
+  zone.style.display='none';
+  thumb.style.display='block';
+  const isImg=type.startsWith('image/');
+  thumb.innerHTML=`<div class="pdf-thumb" style="padding:8px 10px">
+    ${isImg
+      ? `<img src="${dataUrl}" alt="도면" style="max-height:90px;width:100%;object-fit:contain;border-radius:3px;margin-bottom:4px">`
+      : `<i class="ti ti-file-type-pdf" style="font-size:22px;color:var(--danger);display:block;margin-bottom:4px"></i>`}
+    <div class="fname" style="font-size:10px">
+      <i class="ti ti-check" style="color:var(--success)"></i> ${name}<br>
+      <span style="color:var(--text3)">${sizeStr} · 전 공정 공통 적용</span>
+      <button onclick="clearProjFile()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:4px" title="도면 삭제"><i class="ti ti-x"></i></button>
+    </div>
+  </div>`;
+  updateModalDrawingStatus();
+}
+
 function setProjFile(file){
   projFileType=file.type;
   projFileName=file.name;
   const reader=new FileReader();
   reader.onload=(ev)=>{
     projFileData=ev.target.result.split(',')[1];
-    const zone=document.getElementById('projUploadZone');
-    const thumb=document.getElementById('projThumb');
-    zone.style.display='none';
-    thumb.style.display='block';
-    const isImg=file.type.startsWith('image/');
-    thumb.innerHTML=`<div class="pdf-thumb" style="padding:8px 10px">
-      ${isImg
-        ? `<img src="${ev.target.result}" alt="도면" style="max-height:90px;width:100%;object-fit:contain;border-radius:3px;margin-bottom:4px">`
-        : `<i class="ti ti-file-type-pdf" style="font-size:22px;color:var(--danger);display:block;margin-bottom:4px"></i>`}
-      <div class="fname" style="font-size:10px">
-        <i class="ti ti-check" style="color:var(--success)"></i> ${file.name}<br>
-        <span style="color:var(--text3)">${(file.size/1024).toFixed(1)}KB · 전 공정 공통 적용</span>
-        <button onclick="clearProjFile()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:4px" title="도면 삭제"><i class="ti ti-x"></i></button>
-      </div>
-    </div>`;
-    updateModalDrawingStatus();
+    idbSet('proj_drawing',{data:projFileData,type:projFileType,name:projFileName}).catch(()=>{});
+    renderDrawingThumb(ev.target.result, file.type, file.name, `${(file.size/1024).toFixed(1)}KB`);
     saveMeta();
   };
   reader.readAsDataURL(file);
 }
 function clearProjFile(){
   projFileData=null; projFileType=null; projFileName=null;
+  idbDel('proj_drawing').catch(()=>{});
   document.getElementById('projUploadZone').style.display='block';
   document.getElementById('projThumb').style.display='none';
   document.getElementById('projThumb').innerHTML='';
@@ -1396,6 +1418,11 @@ renderList();
 if(procs.length>0){ selProc(cur>=0?cur:0); } else { renderWelcome(); }
 checkApiBar();
 updateApiKeyBtn();
+idbGet('proj_drawing').then(saved=>{
+  if(!saved) return;
+  projFileData=saved.data; projFileType=saved.type; projFileName=saved.name;
+  renderDrawingThumb(`data:${saved.type};base64,${saved.data}`, saved.type, saved.name, '저장됨');
+}).catch(()=>{});
 </script>
 </body>
 </html>
