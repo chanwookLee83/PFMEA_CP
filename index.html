@@ -343,6 +343,59 @@ td[contenteditable="true"]:focus{
 }
 .kw-tag:hover{background:rgba(61,99,245,.15);border-color:var(--accent);color:var(--accent)}
 
+
+/* ── Drawing Analysis ────────────────────────────────────── */
+.drw-panel{display:flex;flex-direction:column;gap:14px}
+.drw-preview{
+  border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;background:var(--bg3);
+  display:flex;align-items:center;justify-content:center;
+  min-height:200px;max-height:340px;position:relative
+}
+.drw-preview img{max-width:100%;max-height:340px;object-fit:contain;display:block}
+.drw-meta-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.drw-meta-chip{
+  padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;
+  border:1px solid var(--border2);background:var(--bg3);color:var(--text2)
+}
+.drw-meta-chip.mat{background:rgba(79,124,255,.08);color:var(--accent2);border-color:rgba(79,124,255,.2)}
+.drw-meta-chip.surf{background:rgba(34,197,94,.07);color:var(--success);border-color:rgba(34,197,94,.2)}
+.drw-meta-chip.scale{background:var(--bg3);color:var(--text3)}
+.dim-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+@media(max-width:500px){.dim-grid{grid-template-columns:1fr}}
+.dim-card{
+  border:1px solid var(--border);border-radius:var(--r);
+  padding:8px 10px;background:var(--bg2);transition:.12s
+}
+.dim-card:hover{border-color:var(--border2);background:var(--bg3)}
+.dim-card.sc{border-left:3px solid var(--danger);background:rgba(239,68,68,.03)}
+.dim-card.cc{border-left:3px solid var(--warn);background:rgba(245,158,11,.03)}
+.dim-label{font-size:10px;color:var(--text3);margin-bottom:3px;
+  text-transform:uppercase;letter-spacing:.5px}
+.dim-value{font-size:15px;font-weight:700;color:var(--text1);font-family:monospace}
+.dim-tol{font-size:11px;color:var(--text2);margin-top:2px}
+.dim-note{font-size:10px;color:var(--text3);margin-top:2px}
+.gdt-table{width:100%;border-collapse:collapse;font-size:12px}
+.gdt-table th{padding:5px 8px;background:var(--bg3);color:var(--text3);
+  font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.gdt-table td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text1)}
+.gdt-table tr:last-child td{border-bottom:none}
+.note-list{list-style:none;padding:0;margin:0}
+.note-list li{font-size:12px;color:var(--text2);padding:4px 0 4px 18px;
+  border-bottom:1px solid var(--border);position:relative;line-height:1.5}
+.note-list li:last-child{border-bottom:none}
+.note-list li::before{content:"•";position:absolute;left:4px;color:var(--text3)}
+.drw-section{margin-bottom:0}
+.drw-section-title{
+  font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;
+  letter-spacing:.7px;margin-bottom:8px;display:flex;align-items:center;gap:6px
+}
+.drw-section-title i{font-size:13px;color:var(--accent2)}
+.analyze-btn-row{display:flex;gap:6px;margin-top:6px}
+.analyze-loading{
+  display:flex;align-items:center;gap:8px;
+  font-size:11px;color:var(--accent2);padding:6px 0
+}
 /* ── Responsive ──────────────────────────────────────── */
 @media(max-width:768px){
   .sidebar{position:fixed;left:0;top:0;height:100%;z-index:100;transform:translateX(-100%)}
@@ -543,6 +596,23 @@ td[contenteditable="true"]:focus{
   </div>
 </div>
 
+<!-- ── Drawing Analysis Modal ── -->
+<div class="backdrop" id="drwModal">
+  <div class="modal" style="width:680px;max-width:100%">
+    <div class="modal-head">
+      <h3><i class="ti ti-ruler-2" style="color:var(--accent);margin-right:7px"></i>도면 분석 결과</h3>
+      <button onclick="closeDrwModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div id="drwModalBody" class="drw-panel">
+      <div class="loading-box"><div class="spinner"></div><p style="font-size:12px;color:var(--text2)">도면을 분석 중입니다...</p></div>
+    </div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="btn" onclick="closeDrwModal()">닫기</button>
+      <button class="btn primary" onclick="reAnalyzeDrawing()"><i class="ti ti-refresh" style="font-size:13px"></i> 재분석</button>
+    </div>
+  </div>
+</div>
+
 <!-- API Key Modal -->
 <div class="backdrop" id="apiModal">
   <div class="modal" style="width:380px">
@@ -592,6 +662,7 @@ let cur = -1;
 let tab = 'pfmea';
 let upFile = null, upData = null, upType = null;
 let projFileData = null, projFileType = null, projFileName = null;
+let projDrawingInfo = null, projDrawingDataUrl = null;
 
 /* ─ Persist ─ */
 function saveAll(){
@@ -1039,6 +1110,154 @@ function saveEdit(rerun){
   }
 }
 
+
+/* ─ Drawing Analysis ─ */
+const DRW_SYSTEM = `당신은 기계도면 분석 전문가입니다. 업로드된 도면(2D 제조도면, 부품도)을 분석하여 아래 JSON 형식으로만 응답하세요. 마크다운 없이 순수 JSON만 출력하세요.
+
+{
+  "title": "부품명 또는 도면 제목",
+  "material": "재질 (예: SPCC t1.5, AL6061-T6, SUS304)",
+  "surface": "표면처리 (예: 아연도금 5μm, 무처리, 흑색산화)",
+  "scale": "척도 (예: 1:1, 1:2, 없음)",
+  "dimensions": [
+    {
+      "label": "치수 설명 (예: 전체 길이, 구멍 직경, 피치원 직경)",
+      "value": "치수값 (예: 120, φ8.5, M10)",
+      "unit": "단위 (예: mm, inch)",
+      "tolerance": "공차 (예: ±0.1, +0.05/-0, H7, 없음)",
+      "type": "SC 또는 CC 또는 일반",
+      "note": "비고 (없으면 빈 문자열)"
+    }
+  ],
+  "geometrics": [
+    {
+      "symbol": "형상공차 기호명 (예: 진직도, 평면도, 직각도, 위치도, 원통도)",
+      "value": "공차값 (예: 0.05, ⌀0.1)",
+      "datum": "기준면 (예: A, A-B, 없음)"
+    }
+  ],
+  "sc_items": ["SC/CC 해당 치수 또는 특성 요약 목록 (없으면 빈 배열)"],
+  "notes": ["도면 주기사항 1", "도면 주기사항 2"]
+}
+
+중요 규칙:
+- dimensions는 도면에서 읽을 수 있는 주요 치수를 최대한 추출 (최소 5개 이상)
+- SC(안전특성): 안전·법규 관련 / CC(중요특성): 기능·조립 관련
+- 치수가 명확히 보이지 않으면 "판독불가"로 표기
+- 도면이 없거나 분석 불가능한 경우에도 JSON 형식은 유지`;
+
+async function startDrawingAnalysis(){
+  if(!projFileData){ toast('도면을 먼저 업로드하세요','err'); return; }
+  if(!getKey()){ toast('API 키를 먼저 입력하세요','err'); return; }
+  // 버튼을 로딩 상태로
+  const row=document.getElementById('drwAnalyzeRow');
+  if(row) row.innerHTML=`<div class="analyze-loading"><div class="spinner" style="width:16px;height:16px;border-width:2px"></div> AI 도면 분석 중...</div>`;
+  try{
+    const isImg=projFileType.startsWith('image/');
+    const isPdf=projFileType==='application/pdf';
+    const content=[];
+    if(isImg||isPdf){
+      content.push({type:isPdf?'document':'image',source:{type:'base64',media_type:projFileType,data:projFileData}});
+    }
+    content.push({type:'text',text:'이 도면을 분석하여 주요 치수, 공차, 재질, 형상공차, 주기사항을 추출해 주세요.'});
+    const res=await fetch(API_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:4000,system:DRW_SYSTEM,messages:[{role:'user',content}]})
+    });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data=await res.json();
+    const text=data.content.map(c=>c.text||'').join('');
+    let clean=text.replace(/```json\n?/g,'').replace(/```/g,'').trim();
+    projDrawingInfo=JSON.parse(clean);
+    await idbSet('proj_drawing_info',projDrawingInfo).catch(()=>{});
+    // 썸네일 버튼 갱신
+    renderDrawingThumb(projDrawingDataUrl||`data:${projFileType};base64,${projFileData}`,projFileType,projFileName,'저장됨');
+    toast('도면 분석 완료','ok');
+    openDrwModal(); // 자동으로 결과 열기
+  }catch(e){
+    toast('도면 분석 실패: '+e.message,'err');
+    renderDrawingThumb(projDrawingDataUrl||`data:${projFileType};base64,${projFileData}`,projFileType,projFileName,'저장됨');
+  }
+}
+
+function openDrwModal(){
+  document.getElementById('drwModal').classList.add('open');
+  renderDrwModal();
+}
+function closeDrwModal(){ document.getElementById('drwModal').classList.remove('open'); }
+function reAnalyzeDrawing(){ closeDrwModal(); startDrawingAnalysis(); }
+
+function renderDrwModal(){
+  const body=document.getElementById('drwModalBody');
+  if(!projDrawingInfo){
+    body.innerHTML=`<div class="loading-box"><div class="spinner"></div><p style="font-size:12px;color:var(--text2)">분석 결과가 없습니다. AI 도면 분석을 실행하세요.</p></div>`;
+    return;
+  }
+  const d=projDrawingInfo;
+  const isImg=projFileType&&projFileType.startsWith('image/');
+  const previewHtml=isImg&&projDrawingDataUrl
+    ?`<img src="${projDrawingDataUrl}" alt="도면" style="max-width:100%;max-height:300px;object-fit:contain;border-radius:var(--r)">`
+    :`<div style="text-align:center;padding:40px"><i class="ti ti-file-type-pdf" style="font-size:48px;color:var(--danger);display:block;margin-bottom:8px"></i><p style="font-size:12px;color:var(--text2)">${projFileName||'도면'}</p></div>`;
+
+  const typeClass=t=>t==='SC'?'sc':t==='CC'?'cc':'';
+  const typeBadge=t=>t==='SC'
+    ?`<span class="badge char-sc" style="font-size:9px;margin-left:4px">SC</span>`
+    :t==='CC'?`<span class="badge char-cc" style="font-size:9px;margin-left:4px">CC</span>`:'';
+
+  const dimCards=(d.dimensions||[]).map(dim=>`
+    <div class="dim-card ${typeClass(dim.type)}">
+      <div class="dim-label">${esc(dim.label)}${typeBadge(dim.type)}</div>
+      <div class="dim-value">${esc(dim.value)}${dim.unit&&dim.unit!=='없음'?' <span style="font-size:11px;font-weight:400;color:var(--text3)">'+esc(dim.unit)+'</span>':''}</div>
+      ${dim.tolerance&&dim.tolerance!=='없음'?`<div class="dim-tol"><i class="ti ti-arrows-horizontal" style="font-size:10px"></i> ${esc(dim.tolerance)}</div>`:''}
+      ${dim.note?`<div class="dim-note">${esc(dim.note)}</div>`:''}
+    </div>`).join('');
+
+  const gdtRows=(d.geometrics||[]).map(g=>`
+    <tr>
+      <td>${esc(g.symbol)}</td>
+      <td style="font-family:monospace;font-weight:600">${esc(g.value)}</td>
+      <td style="color:var(--text3)">${esc(g.datum)||'-'}</td>
+    </tr>`).join('');
+
+  const scList=(d.sc_items||[]);
+  const noteList=(d.notes||[]);
+
+  body.innerHTML=`
+    <div class="drw-preview">${previewHtml}</div>
+
+    <div class="drw-meta-row">
+      ${d.title?`<span class="drw-meta-chip" style="font-weight:600">${esc(d.title)}</span>`:''}
+      ${d.material&&d.material!=='없음'?`<span class="drw-meta-chip mat"><i class="ti ti-layers-subtract" style="font-size:11px"></i> ${esc(d.material)}</span>`:''}
+      ${d.surface&&d.surface!=='없음'?`<span class="drw-meta-chip surf"><i class="ti ti-paint" style="font-size:11px"></i> ${esc(d.surface)}</span>`:''}
+      ${d.scale&&d.scale!=='없음'?`<span class="drw-meta-chip scale">척도: ${esc(d.scale)}</span>`:''}
+    </div>
+
+    ${dimCards?`<div class="drw-section">
+      <div class="drw-section-title"><i class="ti ti-ruler"></i>주요 치수</div>
+      <div class="dim-grid">${dimCards}</div>
+    </div>`:''}
+
+    ${gdtRows?`<div class="drw-section">
+      <div class="drw-section-title"><i class="ti ti-vector-triangle"></i>형상·위치 공차 (GD&T)</div>
+      <table class="gdt-table">
+        <thead><tr><th>공차 종류</th><th>공차값</th><th>데이텀</th></tr></thead>
+        <tbody>${gdtRows}</tbody>
+      </table>
+    </div>`:''}
+
+    ${scList.length?`<div class="drw-section">
+      <div class="drw-section-title"><i class="ti ti-alert-triangle" style="color:var(--danger)"></i>특별 특성 (SC/CC)</div>
+      <ul class="note-list">${scList.map(s=>`<li><span class="badge char-sc" style="font-size:9px;margin-right:5px">SC/CC</span>${esc(s)}</li>`).join('')}</ul>
+    </div>`:''}
+
+    ${noteList.length?`<div class="drw-section">
+      <div class="drw-section-title"><i class="ti ti-notes"></i>주기 사항</div>
+      <ul class="note-list">${noteList.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>
+    </div>`:''}
+  `;
+}
+
 async function reanalyze(i){
   procs[i].status='analyzing'; procs[i].pfmea=[]; procs[i].cp=[];
   renderList(); renderContent();
@@ -1077,14 +1296,21 @@ function renderDrawingThumb(dataUrl, type, name, sizeStr){
   zone.style.display='none';
   thumb.style.display='block';
   const isImg=type.startsWith('image/');
+  const hasDrw=!!projDrawingInfo;
   thumb.innerHTML=`<div class="pdf-thumb" style="padding:8px 10px">
     ${isImg
-      ? `<img src="${dataUrl}" alt="도면" style="max-height:90px;width:100%;object-fit:contain;border-radius:3px;margin-bottom:4px">`
+      ? `<img src="${dataUrl}" alt="도면" style="max-height:90px;width:100%;object-fit:contain;border-radius:3px;margin-bottom:4px;cursor:pointer" onclick="openDrwModal()" title="클릭하여 도면 분석 보기">`
       : `<i class="ti ti-file-type-pdf" style="font-size:22px;color:var(--danger);display:block;margin-bottom:4px"></i>`}
     <div class="fname" style="font-size:10px">
       <i class="ti ti-check" style="color:var(--success)"></i> ${name}<br>
       <span style="color:var(--text3)">${sizeStr} · 전 공정 공통 적용</span>
       <button onclick="clearProjFile()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:4px" title="도면 삭제"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="analyze-btn-row" id="drwAnalyzeRow">
+      ${hasDrw
+        ? `<button class="btn" style="flex:1;font-size:11px;padding:5px 8px" onclick="openDrwModal()"><i class="ti ti-eye" style="font-size:12px"></i> 분석 결과 보기</button>
+           <button class="btn" style="font-size:11px;padding:5px 8px" onclick="startDrawingAnalysis()" title="재분석"><i class="ti ti-refresh" style="font-size:12px"></i></button>`
+        : `<button class="btn primary" style="flex:1;font-size:11px;padding:5px 8px" onclick="startDrawingAnalysis()"><i class="ti ti-brain" style="font-size:12px"></i> AI 도면 분석</button>`}
     </div>
   </div>`;
   updateModalDrawingStatus();
@@ -1096,15 +1322,21 @@ function setProjFile(file){
   const reader=new FileReader();
   reader.onload=(ev)=>{
     projFileData=ev.target.result.split(',')[1];
+    projDrawingDataUrl=ev.target.result;
+    projDrawingInfo=null; // 새 파일 → 분석 초기화
     idbSet('proj_drawing',{data:projFileData,type:projFileType,name:projFileName}).catch(()=>{});
     renderDrawingThumb(ev.target.result, file.type, file.name, `${(file.size/1024).toFixed(1)}KB`);
     saveMeta();
+    // API 키 있으면 자동 분석
+    if(getKey()) startDrawingAnalysis();
   };
   reader.readAsDataURL(file);
 }
 function clearProjFile(){
   projFileData=null; projFileType=null; projFileName=null;
+  projDrawingInfo=null; projDrawingDataUrl=null;
   idbDel('proj_drawing').catch(()=>{});
+  idbDel('proj_drawing_info').catch(()=>{});
   document.getElementById('projUploadZone').style.display='block';
   document.getElementById('projThumb').style.display='none';
   document.getElementById('projThumb').innerHTML='';
@@ -1593,7 +1825,11 @@ updateApiKeyBtn();
 idbGet('proj_drawing').then(saved=>{
   if(!saved) return;
   projFileData=saved.data; projFileType=saved.type; projFileName=saved.name;
-  renderDrawingThumb(`data:${saved.type};base64,${saved.data}`, saved.type, saved.name, '저장됨');
+  projDrawingDataUrl=`data:${saved.type};base64,${saved.data}`;
+  return idbGet('proj_drawing_info');
+}).then(info=>{
+  if(info){ projDrawingInfo=info; }
+  if(projFileData) renderDrawingThumb(projDrawingDataUrl, projFileType, projFileName, '저장됨');
 }).catch(()=>{});
 </script>
 </body>
