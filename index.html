@@ -2078,6 +2078,7 @@ const SYSTEM_PROMPT=`당신은 AIAG-VDA PFMEA 5th Edition 및 IATF 16949 Control
 자동차 부품 생산공정의 PFMEA와 Control Plan을 한국어로 작성합니다.
 첨부된 도면에 영어, 독일어 또는 일본어로 적힌 치수·공차·재질·주기사항이 있으면 정확히 해석하여, spec/feat 등 모든 필드는 한글로 작성하되 원문 규격 표기(예: 기호, 규격코드)는 괄호로 함께 표기하세요. 도면 용어를 오역하지 않도록 주의하세요.
 사용자가 "참고 — 도면 분석으로 추정된 부품 정보"를 함께 제공한 경우, 그 부품 종류·기능·장착 위치를 적극 반영하여 일반론이 아닌 해당 부품에 실제로 발생할 수 있는 구체적인 고장모드·원인·영향을 도출하세요. 예를 들어 부품이 스프링 지지 로드로 추정되면 "스프링 장력 이상", "조립 시 단차 불량으로 인한 작동 불량" 등 부품 특성에 맞는 내용을, 사출 플라스틱 부품으로 추정되면 "싱크마크", "버", "게이트 잔류 흔적" 등 사출 공정 특유의 결함을 우선적으로 고려하세요.
+사용자가 "참고 — 도면 분석에서 추출된 실제 치수/공차 데이터"를 함께 제공한 경우, 이는 별도의 도면 분석 단계에서 이미 정확히 읽어낸 확정 데이터입니다. CP의 spec/feat/char를 작성할 때 첨부 이미지를 다시 보고 직접 추측하지 말고, 이 제공된 목록의 값(치수, 공차, SC/CC 여부)을 그대로 우선 사용하세요. 목록에 없는 세부 항목이 필요하면 그때만 첨부 이미지를 보조적으로 참고하세요.
 
 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트나 마크다운 없이 순수 JSON만 출력:
 {
@@ -2207,11 +2208,53 @@ function buildPrompt(p){
 - 참고: ${pid.criticalityHint||'없음'}
 위 부품 정보를 참고하여, 이 부품/기능에 특화된 더 구체적이고 현실적인 고장모드·원인·관리방법을 도출하세요. 단, 신뢰도가 낮은 추정이므로 도면의 실제 치수·공차·형상 정보가 부품 정보와 상충하면 도면 데이터를 우선하세요.`;
   }
+
+  // 도면 분석에서 얻은 재질/표면처리 정보를 함께 전달
+  // → 원재료 입고검사, 사출/성형 공정처럼 재질 자체가 핵심 관리대상인 공정에서 빠짐없이 반영되도록 함
+  let materialLine='';
+  if(projDrawingInfo&&projDrawingInfo.material&&projDrawingInfo.material!=='없음'&&projDrawingInfo.material!=='판독불가'){
+    const isMaterialCriticalProcess = /원재료|수입검사|입고|레진|소재|재질|성형|사출|소재검사/.test(p.name+' '+p.func);
+    materialLine=`\n\n참고 — 도면에 명시된 재질/표면처리 정보:
+- 재질: ${projDrawingInfo.material}
+- 표면처리: ${projDrawingInfo.surface&&projDrawingInfo.surface!=='없음'?projDrawingInfo.surface:'명시 없음'}
+${isMaterialCriticalProcess
+  ? '이 공정명/기능에 "원재료/입고/수입검사/레진/소재/재질/성형/사출" 등의 키워드가 포함되어 있어, 위 재질 정보가 이 공정의 핵심 관리 대상입니다. 사용자가 공정 기능에 재질명을 직접 적지 않았더라도, 도면에 명시된 재질(' + projDrawingInfo.material + ')을 기준으로 고장모드(예: 재질 오투입, 재질 증명서 누락, 재질 규격 불일치, 수분율/물성 불량 등)와 CP 관리항목(예: 재질 증명서 확인, 적외선분광분석기(FT-IR) 동등성 확인, 입고 성상검사)을 구체적으로 작성하세요.'
+  : '이 공정과 관련 있는 경우에만 재질 정보를 참고하여 재질 관련 고장모드(예: 재질 강도 부족, 표면처리 불량 등)를 포함하세요.'}`;
+  }
+
+  // 도면 분석에서 추출된 실제 치수/공차/SC·CC/GD&T 데이터를 구조화하여 전달
+  // → CP의 spec/feat/char 필드가 도면 분석 결과와 정확히 일치하도록 함 (도면을 다시 읽어 추측하지 않도록)
+  let dimLine='';
+  if(projDrawingInfo){
+    const dims=projDrawingInfo.dimensions||[];
+    const geos=projDrawingInfo.geometrics||[];
+    const scs=projDrawingInfo.sc_items||[];
+    if(dims.length||geos.length||scs.length){
+      const dimRows=dims.map(d=>{
+        const tolStr=d.tolerance&&d.tolerance!=='없음'?` ${d.tolerance}`:'';
+        const typeStr=d.type&&d.type!=='일반'?` [${d.type}]`:'';
+        return `  - ${d.label}: ${d.value}${d.unit?d.unit:''}${tolStr}${typeStr}`;
+      }).join('\n');
+      const geoRows=geos.map(g=>`  - ${g.symbol}: ${g.value}${g.datum?` (데이텀 ${g.datum})`:''}`).join('\n');
+      const scRows=scs.map(s=>`  - ${s}`).join('\n');
+      dimLine=`\n\n참고 — 도면 분석에서 추출된 실제 치수/공차 데이터 (CP의 spec/feat 작성 시 이 값을 그대로 인용할 것, 도면을 다시 추측하지 말 것):
+${dimRows?'[치수/공차 목록]\n'+dimRows:''}
+${geoRows?'\n[형상·위치공차(GD&T)]\n'+geoRows:''}
+${scRows?'\n[도면에 표시된 SC/CC 핵심특성]\n'+scRows:''}
+
+CP 작성 규칙(중요):
+- 위 목록에서 이 공정과 관련된 치수/공차 항목을 CP의 spec 필드에 도면 표기 그대로(공차 포함) 옮겨 적을 것
+- 위 목록에 type이 SC 또는 CC로 표시된 항목, 또는 [SC/CC 핵심특성]에 나열된 항목은 CP의 char를 반드시 그 특성대로 SC 또는 CC로 일치시킬 것 (임의로 일반으로 낮추지 말 것)
+- 도면에 없는 치수를 임의로 만들어내지 말고, 이 공정에서 실제로 관리 가능한 항목만 CP에 포함할 것
+- GD&T(형상·위치공차) 항목이 이 공정의 관리 특성과 관련 있으면 gage(측정기법)에 적합한 측정 방법(예: 3차원측정기/CMM, 형상측정기, 핀게이지 등)을 구체적으로 제시할 것`;
+    }
+  }
+
   return `공정 정보:
 - 공정번호: ${p.num||'N/A'}
 - 공정명: ${p.name}
 - 공정 기능/특성: ${p.func}
-- 장비 타입: ${equipLabel}${kwLine}${partLine}
+- 장비 타입: ${equipLabel}${kwLine}${partLine}${materialLine}${dimLine}
 ${p.fileData||projFileData?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악하여 ':''}
 이 공정에 대한 PFMEA와 Control Plan을 AIAG-VDA 5th Edition 기준으로 작성해주세요.
 실제 자동차 부품 양산 현장에서 발생 가능한 구체적인 내용으로 전문적으로 작성하세요.`;
