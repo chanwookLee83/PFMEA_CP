@@ -1264,25 +1264,32 @@ function renderPFMEA(p,c){
         <col style="width:52px">   <!-- S -->
         <col style="width:200px">  <!-- 잠재원인 -->
         <col style="width:52px">   <!-- O -->
-        <col style="width:180px">  <!-- 현행관리 -->
+        <col style="width:160px">  <!-- 예방 -->
+        <col style="width:160px">  <!-- 검출 -->
         <col style="width:52px">   <!-- D -->
         <col style="width:64px">   <!-- RPN -->
         <col style="width:220px">  <!-- 권장조치 -->
         <col style="width:32px">   <!-- 삭제 -->
       </colgroup>
-      <thead><tr>
-        <th>#</th>
-        <th>잠재 고장모드</th>
-        <th>고장 영향</th>
-        <th style="text-align:center">S</th>
-        <th>잠재 원인</th>
-        <th style="text-align:center">O</th>
-        <th>현행 관리방법</th>
-        <th style="text-align:center">D</th>
-        <th style="text-align:center">RPN</th>
-        <th>권장 조치사항</th>
-        <th></th>
-      </tr></thead>
+      <thead>
+        <tr>
+          <th rowspan="2">#</th>
+          <th rowspan="2">잠재 고장모드</th>
+          <th rowspan="2">고장 영향</th>
+          <th rowspan="2" style="text-align:center">S</th>
+          <th rowspan="2">잠재 원인</th>
+          <th rowspan="2" style="text-align:center">O</th>
+          <th colspan="2" style="text-align:center">현 공정관리(P/D)</th>
+          <th rowspan="2" style="text-align:center">D</th>
+          <th rowspan="2" style="text-align:center">RPN</th>
+          <th rowspan="2">권장 조치사항</th>
+          <th rowspan="2"></th>
+        </tr>
+        <tr>
+          <th style="font-size:11px;color:var(--accent2)">예방</th>
+          <th style="font-size:11px;color:var(--accent2)">검출</th>
+        </tr>
+      </thead>
       <tbody id="pfmeaTbody">
       ${rows.map((r,ri)=>{
         const rv=rpn(r);
@@ -1295,7 +1302,8 @@ function renderPFMEA(p,c){
           <td class="num-cell"><span class="sv ${svClass(r.s||1)}">${r.s||'-'}</span></td>
           <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'cause',this)">${esc(r.cause)}</td>
           <td class="num-cell" style="font-weight:700;font-size:14px;color:${oColor}">${r.o||'-'}</td>
-          <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'ctrl',this)">${esc(r.ctrl)}</td>
+          <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'ctrlP',this)">${esc(r.ctrlP||(r.ctrl||''))}</td>
+          <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'ctrlD',this)">${esc(r.ctrlD||'')}</td>
           <td class="num-cell" style="font-weight:700;font-size:14px;color:${dColor}">${r.d||''}</td>
           <td class="num-cell"><span class="rpn ${rpnClass(rv)}" style="font-size:14px;font-weight:700">${rv}</span></td>
           <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'action',this)">${esc(r.action)}</td>
@@ -1397,7 +1405,7 @@ function rpn(r){ return (r.s||0)*(r.o||0)*(r.d||0); }
 function delRow(type,ri){ procs[cur][type].splice(ri,1); renderContent(); saveAll(); }
 function delCpRow(ri){ procs[cur].cp.splice(ri,1); renderContent(); saveAll(); }
 function addRow(){
-  procs[cur].pfmea.push({fm:'',effect:'',s:5,cause:'',o:3,ctrl:'검사',d:4,action:''});
+  procs[cur].pfmea.push({fm:'',effect:'',s:5,cause:'',o:3,ctrlP:'',ctrlD:'검사',d:4,action:''});
   renderContent(); saveAll();
 }
 function addCpRow(){
@@ -2089,7 +2097,8 @@ const SYSTEM_PROMPT=`당신은 AIAG-VDA PFMEA 5th Edition 및 IATF 16949 Control
       "s": 심각도(1-10 정수),
       "cause": "잠재 원인",
       "o": 발생도(1-10 정수),
-      "ctrl": "현행 관리방법",
+      "ctrlP": "예방 관리방법 (공정파라미터·Poka-Yoke·작업표준·설비점검 등)",
+      "ctrlD": "검출 관리방법 (검사·계측기·SPC·비전검사·육안검사 등)",
       "d": 검출도(1-10 정수),
       "action": "권장 조치사항"
     }
@@ -2402,10 +2411,10 @@ function exportExcel(){
   // row8 빈
   A.push(blank());
   // row9 헤더1
-  r=['공정의 기능','잠재적 고장형태','고장의 잠재적 영향','심각도','특별특성','고장의 잠재적 원인','','발생도','현공정 관리','','검출 방법','검출도','RPN','권고 조치사항','','완료예정일','조치결과','','','',''];
+  r=['공정의 기능','잠재적 고장형태','고장의 잠재적 영향','심각도','특별특성','고장의 잠재적 원인','','발생도','현공정 관리(P/D)','','검출 방법','검출도','RPN','권고 조치사항','','완료예정일','조치결과','','','',''];
   A.push(r);
-  // row10 헤더2 (조치결과 하위)
-  r=blank(); r[16]='조치내용'; r[17]='심각도'; r[18]='발생도'; r[19]='검출도'; r[20]='RPN'; A.push(r);
+  // row10 헤더2 (현공정관리 하위 + 조치결과 하위)
+  r=blank(); r[8]='예방'; r[9]='검출'; r[16]='조치내용'; r[17]='심각도'; r[18]='발생도'; r[19]='검출도'; r[20]='RPN'; A.push(r);
 
   // ── 데이터 행 ──
   procs.forEach(p=>{
@@ -2421,8 +2430,9 @@ function exportExcel(){
       d[4]=sc;                  // 특별특성
       d[5]=row.cause||'';       // 고장의 잠재적 원인 (F:G)
       d[7]=row.o||'';           // 발생도
-      d[8]=row.ctrl||'';        // 현공정 관리 (I:J)
-      d[10]='';                 // 검출 방법 (현공정관리에 통합되어 비움)
+      d[8]=row.ctrlP||(row.ctrl||'');  // 예방 관리방법 (I열)
+      d[9]=row.ctrlD||'';              // 검출 관리방법 (J열)
+      d[10]='';                        // 검출 방법 (공란)
       d[11]=row.d||'';          // 검출도
       d[12]=rpn(row);           // RPN
       d[13]=row.action||'';     // 권고 조치사항 (N:O)
@@ -2447,7 +2457,7 @@ function exportExcel(){
     {s:{r:8,c:4},e:{r:9,c:4}},
     {s:{r:8,c:5},e:{r:9,c:6}},   // 원인 F:G
     {s:{r:8,c:7},e:{r:9,c:7}},
-    {s:{r:8,c:8},e:{r:9,c:9}},   // 현공정 I:J
+    {s:{r:8,c:8},e:{r:8,c:9}},   // 현공정 관리(P/D) — 가로만 병합, 서브헤더는 예방/검출
     {s:{r:8,c:10},e:{r:9,c:10}},
     {s:{r:8,c:11},e:{r:9,c:11}},
     {s:{r:8,c:12},e:{r:9,c:12}},
@@ -2461,7 +2471,6 @@ function exportExcel(){
     (p.pfmea||[]).forEach((row,i)=>{
       const rr=dataStart;
       ws['!merges'].push({s:{r:rr,c:5},e:{r:rr,c:6}});   // 원인
-      ws['!merges'].push({s:{r:rr,c:8},e:{r:rr,c:9}});   // 현공정
       ws['!merges'].push({s:{r:rr,c:13},e:{r:rr,c:14}}); // 권고
       dataStart++;
     });
