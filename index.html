@@ -1484,32 +1484,55 @@ function renderCP(p,c){
         <th style="width:32px"></th>
       </tr></thead>
       <tbody>
-      ${rows.map((r,ri)=>`<tr>
-        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'pn',this)">${esc(r.pn||p.num)}</td>
-        <td style="text-align:center">
-          <select onchange="scv(${cur},'cp',${ri},'flow',this.value)" style="font-size:11px;padding:2px;border-radius:4px;border:1px solid var(--border);background:var(--bg3);color:var(--text2)">
-            <option value="MAIN"${(!r.flow||r.flow==='MAIN')?' selected':''}>MAIN</option>
-            <option value="SUB"${r.flow==='SUB'?' selected':''}>SUB</option>
-            <option value="외주"${r.flow==='외주'?' selected':''}>외주</option>
-          </select>
-        </td>
-        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'op',this)">${esc(r.op||p.name)}</td>
-        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'mach',this)">${esc(r.mach)}</td>
-        <td style="text-align:center">${charBadge(r.char)}</td>
-        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'feat',this)">${esc(r.feat)}</td>
-        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'spec',this)">${esc(r.spec)}</td>
-        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'gage',this)">${esc(r.gage)}</td>
-        <td style="text-align:center"><input type="checkbox" ${r.auto==='○'?'checked':''} onchange="scv(${cur},'cp',${ri},'auto',this.checked?'○':'')"></td>
-        <td style="text-align:center" contenteditable="true" onblur="sc(${cur},'cp',${ri},'size',this)">${esc(r.size)}</td>
-        <td style="text-align:center" contenteditable="true" onblur="sc(${cur},'cp',${ri},'freq',this)">${esc(r.freq)}</td>
-        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'method',this)">${esc(r.method)}</td>
-        <td style="text-align:center"><input type="checkbox" ${r.respProd==='○'?'checked':''} onchange="scv(${cur},'cp',${ri},'respProd',this.checked?'○':'')"></td>
-        <td style="text-align:center"><input type="checkbox" ${r.respMat==='○'?'checked':''} onchange="scv(${cur},'cp',${ri},'respMat',this.checked?'○':'')"></td>
-        <td style="text-align:center"><input type="checkbox" ${r.respQC==='○'?'checked':''} onchange="scv(${cur},'cp',${ri},'respQC',this.checked?'○':'')"></td>
-        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'react',this)">${esc(r.react)}</td>
-        <td contenteditable="true" onblur="sc(${cur},'cp',${ri},'note',this)">${esc(r.note)}</td>
-        <td><button onclick="delCpRow(${ri})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px"><i class="ti ti-x"></i></button></td>
-      </tr>`).join('')}
+      ${(()=>{
+        // 공정번호·공정흐름도·공정명이 연속으로 동일하면 첫 행에만 표시(rowspan 병합)
+        let html='';
+        for(let ri=0; ri<rows.length; ){
+          const r=rows[ri];
+          const pnVal=r.pn||p.num, flowVal=r.flow||'MAIN', opVal=r.op||p.name;
+          let span=1;
+          while(ri+span<rows.length){
+            const n=rows[ri+span];
+            if((n.pn||p.num)===pnVal && (n.flow||'MAIN')===flowVal && (n.op||p.name)===opVal) span++;
+            else break;
+          }
+          for(let k=0;k<span;k++){
+            const rr=ri+k, rw=rows[rr];
+            html+='<tr>';
+            if(k===0){
+              html+=`
+                <td rowspan="${span}" contenteditable="true" onblur="scGroup(${cur},'cp',${ri},${span},'pn',this)">${esc(pnVal)}</td>
+                <td rowspan="${span}" style="text-align:center">
+                  <select onchange="scvGroup(${cur},'cp',${ri},${span},'flow',this.value)" style="font-size:11px;padding:2px;border-radius:4px;border:1px solid var(--border);background:var(--bg3);color:var(--text2)">
+                    <option value="MAIN"${flowVal==='MAIN'?' selected':''}>MAIN</option>
+                    <option value="SUB"${flowVal==='SUB'?' selected':''}>SUB</option>
+                    <option value="외주"${flowVal==='외주'?' selected':''}>외주</option>
+                  </select>
+                </td>
+                <td rowspan="${span}" contenteditable="true" onblur="scGroup(${cur},'cp',${ri},${span},'op',this)">${esc(opVal)}</td>`;
+            }
+            html+=`
+                <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'mach',this)">${esc(rw.mach)}</td>
+                <td style="text-align:center">${charBadge(rw.char)}</td>
+                <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'feat',this)">${esc(rw.feat)}</td>
+                <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'spec',this)">${esc(rw.spec)}</td>
+                <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'gage',this)">${esc(rw.gage)}</td>
+                <td style="text-align:center"><input type="checkbox" ${rw.auto==='○'?'checked':''} onchange="scv(${cur},'cp',${rr},'auto',this.checked?'○':'')"></td>
+                <td style="text-align:center" contenteditable="true" onblur="sc(${cur},'cp',${rr},'size',this)">${esc(rw.size)}</td>
+                <td style="text-align:center" contenteditable="true" onblur="sc(${cur},'cp',${rr},'freq',this)">${esc(rw.freq)}</td>
+                <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'method',this)">${esc(rw.method)}</td>
+                <td style="text-align:center"><input type="checkbox" ${rw.respProd==='○'?'checked':''} onchange="scv(${cur},'cp',${rr},'respProd',this.checked?'○':'')"></td>
+                <td style="text-align:center"><input type="checkbox" ${rw.respMat==='○'?'checked':''} onchange="scv(${cur},'cp',${rr},'respMat',this.checked?'○':'')"></td>
+                <td style="text-align:center"><input type="checkbox" ${rw.respQC==='○'?'checked':''} onchange="scv(${cur},'cp',${rr},'respQC',this.checked?'○':'')"></td>
+                <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'react',this)">${esc(rw.react)}</td>
+                <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'note',this)">${esc(rw.note)}</td>
+                <td><button onclick="delCpRow(${rr})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px"><i class="ti ti-x"></i></button></td>
+              </tr>`;
+          }
+          ri+=span;
+        }
+        return html;
+      })()}
       </tbody>
     </table>
     </div>
@@ -1529,6 +1552,22 @@ function sc(pi,type,ri,field,el){
 function scv(pi,type,ri,field,val){
   if(procs[pi]&&procs[pi][type]&&procs[pi][type][ri])
     procs[pi][type][ri][field]=val;
+  saveAll();
+}
+// rowspan으로 병합 표시된 셀 편집용 — 병합된 구간(startIdx~startIdx+count-1) 전체에 동일 값을 반영
+function scGroup(pi,type,startIdx,count,field,el){
+  const val=el.textContent.trim();
+  for(let i=0;i<count;i++){
+    const row=procs[pi]&&procs[pi][type]&&procs[pi][type][startIdx+i];
+    if(row) row[field]=val;
+  }
+  saveAll();
+}
+function scvGroup(pi,type,startIdx,count,field,val){
+  for(let i=0;i<count;i++){
+    const row=procs[pi]&&procs[pi][type]&&procs[pi][type][startIdx+i];
+    if(row) row[field]=val;
+  }
   saveAll();
 }
 function esc(s){ return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
