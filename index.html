@@ -548,7 +548,7 @@ td[contenteditable="true"]:focus{
       <input id="plant" placeholder="예) 창원 1공장" oninput="saveMeta()">
       <label>PFMEA No.</label>
       <input id="pfmeaNo" placeholder="예) PFMEA-2025-001" oninput="saveMeta()">
-      <label style="margin-top:10px">프로젝트 도면 (전 공정 공통)</label>
+      <label style="margin-top:10px">프로젝트 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(ASSY + 하위 자재, 여러 장 등록 가능)</span></label>
       <div class="part-hint-row" id="partHintRowPre" style="margin-bottom:6px">
         <label class="part-hint-label" for="partHintInputPre">이 부품이 어디에 들어가는지 알면 먼저 입력해두세요 (도면 업로드 전에도 가능)</label>
         <input type="text" id="partHintInputPre" class="part-hint-input"
@@ -561,10 +561,10 @@ td[contenteditable="true"]:focus{
            onclick="document.getElementById('projFileIn').click()"
            ondrop="onProjDrop(event)" ondragover="onProjOver(event)" ondragleave="onProjLeave(event)">
         <i class="ti ti-file-upload" aria-hidden="true" style="font-size:20px;display:block;margin-bottom:4px"></i>
-        <p style="font-size:11px">PDF / 이미지 업로드</p>
+        <p id="projUploadLabel" style="font-size:11px">PDF / 이미지 업로드</p>
       </div>
       <div id="projThumb" style="display:none;margin-top:6px"></div>
-      <input type="file" id="projFileIn" accept=".pdf,image/*" style="display:none" onchange="onProjFileSel(event)">
+      <input type="file" id="projFileIn" accept=".pdf,image/*" multiple style="display:none" onchange="onProjFileSel(event)">
     </div>
 
     <div class="proc-list" id="procList"></div>
@@ -624,10 +624,10 @@ td[contenteditable="true"]:focus{
       <button onclick="closeAdd()"><i class="ti ti-x"></i></button>
     </div>
 
-    <!-- 도면은 사이드바에서 프로젝트 공통으로 등록 -->
+    <!-- 도면은 사이드바에서 프로젝트 단위로 등록 (ASSY + 하위 자재 여러 장) -->
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);display:flex;align-items:center;gap:8px">
       <i class="ti ti-info-circle" style="color:var(--accent2);font-size:14px;flex-shrink:0"></i>
-      도면은 왼쪽 패널에서 프로젝트 공통으로 1회 등록합니다.
+      도면은 왼쪽 패널에서 등록하고, 아래에서 이 공정에 적용할 도면을 선택하세요.
       <span id="modalDrawingStatus" style="margin-left:auto;white-space:nowrap"></span>
     </div>
     <div class="row2">
@@ -639,6 +639,10 @@ td[contenteditable="true"]:focus{
         <label>공정명 *</label>
         <input id="nName" placeholder="예) 프레스 가공">
       </div>
+    </div>
+    <div class="fblock">
+      <label>적용 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(이 공정 분석에 사용할 도면)</span></label>
+      <select id="nDrawing" style="font-size:12px"></select>
     </div>
     <div class="fblock">
       <label>공정 기능 / 특성 * (상세할수록 AI 품질 향상)</label>
@@ -712,6 +716,10 @@ td[contenteditable="true"]:focus{
       <input id="eKeywords" placeholder="예) SPC, Poka-Yoke, 용접전류, 토크, 비전검사"
              style="font-size:12px" oninput="updateKwSuggest('edit')">
     </div>
+    <div class="fblock">
+      <label>적용 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(이 공정 분석에 사용할 도면)</span></label>
+      <select id="eDrawing" style="font-size:12px"></select>
+    </div>
     <div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:var(--r);padding:8px 12px;margin-bottom:4px;font-size:11px;color:var(--warn);display:flex;align-items:center;gap:7px">
       <i class="ti ti-alert-triangle" style="font-size:13px;flex-shrink:0"></i>
       저장 후 AI 재분석을 실행하면 변경된 내용으로 새로 분석됩니다.
@@ -738,8 +746,8 @@ td[contenteditable="true"]:focus{
     </div>
     <div class="modal-actions" style="margin-top:14px">
       <button class="btn" onclick="closeDrwModal()">닫기</button>
-      <button class="btn" onclick="closeDrwModal();openViewer()"><i class="ti ti-zoom-in" style="font-size:13px"></i> 도면 원본 보기</button>
-      <button class="btn primary" onclick="reAnalyzeDrawing()"><i class="ti ti-refresh" style="font-size:13px"></i> 재분석</button>
+      <button class="btn" onclick="closeDrwModal();openViewer(_activeDrwId)"><i class="ti ti-zoom-in" style="font-size:13px"></i> 도면 원본 보기</button>
+      <button class="btn primary" onclick="reAnalyzeDrawing()"><i class="ti ti-refresh" style="font-size:13px"></i> 전체 재분석</button>
     </div>
   </div>
 </div>
@@ -984,9 +992,24 @@ let procs = [];
 let cur = -1;
 let tab = 'pfmea';
 let upFile = null, upData = null, upType = null;
-let projFileData = null, projFileType = null, projFileName = null;
-let projDrawingInfo = null, projDrawingDataUrl = null;
+// projDrawings: 프로젝트에 등록된 도면 목록 (ASSY 1장 + 하위 자재 여러 장 가능)
+// 각 항목: {id, role:'assy'|'sub', label(도면번호/이름), name(파일명), type(mime), data(base64), dataUrl, info(AI 분석 결과)}
+let projDrawings = [];
+let projAssemblyNotes = ''; // 여러 도면을 종합 분석할 때 AI가 파악한 ASSY-하위자재 조립관계 요약
 let projPartHint = ''; // 사용자가 입력한 부품 적용처/카테고리 힌트 (예: "전동트렁크")
+let _activeDrwId=null, _viewerDrawingId=null; // 모달/뷰어에서 현재 대상으로 삼는 도면 id
+function getDrawing(id){ return projDrawings.find(d=>d.id===id)||null; }
+function defaultDrawing(){ return projDrawings.find(d=>d.role==='assy')||projDrawings[0]||null; }
+function drawingForProc(p){ return (p&&p.drawingId&&getDrawing(p.drawingId))||defaultDrawing(); }
+function drawingSelectOptions(selectedId){
+  let html=`<option value="">자동 (ASSY 우선)</option>`;
+  html+=projDrawings.map(d=>{
+    const roleTxt=d.role==='assy'?'ASSY':'하위자재';
+    const labelTxt=d.label?d.label:d.name;
+    return `<option value="${d.id}"${selectedId===d.id?' selected':''}>[${roleTxt}] ${esc(labelTxt)}</option>`;
+  }).join('');
+  return html;
+}
 function syncPartHintInputs(){
   // 업로드 전(partHintInputPre)과 업로드 후 썸네일(partHintInput) 두 입력창의 값을 서로 동기화
   const pre=document.getElementById('partHintInputPre');
@@ -1423,6 +1446,7 @@ function openEdit(i){
   document.getElementById('eName').value=p.name||'';
   document.getElementById('eFunc').value=p.func||'';
   document.getElementById('eKeywords').value=p.keywords||'';
+  document.getElementById('eDrawing').innerHTML=drawingSelectOptions(p.drawingId||'');
   setEditEquip(p.equipType||'auto');
   updateKwSuggest('edit');
   document.getElementById('editModal')._editIdx=i;
@@ -1442,6 +1466,7 @@ function saveEdit(rerun){
   procs[i].func=func;
   procs[i].equipType=document.getElementById('eEquipAuto').classList.contains('sel-auto')?'auto':'manual';
   procs[i].keywords=document.getElementById('eKeywords').value.trim();
+  procs[i].drawingId=document.getElementById('eDrawing').value||null;
   closeEdit();
   saveAll();
   renderList();
@@ -1456,48 +1481,55 @@ function saveEdit(rerun){
 
 
 /* ─ Drawing Analysis ─ */
-const DRW_SYSTEM = `당신은 기계도면 분석 전문가이며, 영어/독일어/일본어/한국어 도면을 모두 정확히 판독하는 다국어 도면 번역 전문가이기도 합니다. 업로드된 도면(2D 제조도면, 부품도, 사출/금형 도면 등)을 분석하여 아래 JSON 형식으로만 응답하세요. 마크다운 없이 순수 JSON만 출력하세요.
+const DRW_SYSTEM = `당신은 기계도면 분석 전문가이며, 영어/독일어/일본어/한국어 도면을 모두 정확히 판독하는 다국어 도면 번역 전문가이기도 합니다. 업로드된 도면(2D 제조도면, 부품도, 사출/금형 도면 등, ASSY 도면과 하위 자재/구성부품 도면이 함께 첨부될 수 있음)을 분석하여 아래 JSON 형식으로만 응답하세요. 마크다운 없이 순수 JSON만 출력하세요.
+
+입력에는 도면이 1장 이상 첨부되며, 각 도면 이미지 앞에 "[도면 N] 역할: ..., 도면번호/라벨: ..." 형식의 텍스트로 순서와 역할(ASSY/하위 자재)이 표시됩니다. 반드시 이 순서를 그대로 지켜 drawings 배열의 N번째 항목이 도면 N에 대응하도록 응답하세요 (첨부된 도면 수와 drawings 배열 길이가 정확히 일치해야 함).
 
 {
-  "title": "부품명 또는 도면 제목 (원문이 외국어면 '원문 (한글번역)' 형식으로)",
-  "partIdentification": {
-    "category": "이 부품이 속하는 자동차 부품 대분류 (예: 파워트레인, 섀시/서스펜션, 내장 트림, 외장/바디, 전기/전자, 시트, 도어/래치, 사출/플라스틱 부품, 금속 프레스/성형 부품, 고무/씰링, 기타). 자동차 부품이 아니거나 판단 근거가 부족하면 '판단불가'",
-    "partName_kr": "부품의 한글 추정 명칭 (예: 스프링 컨트롤 로드, 도어 힌지 브라켓, 커넥터 하우징, 와이어링 클립, 시트벨트 가이드 등). 확신이 낮으면 '~로 추정' 표현 사용",
-    "function": "이 부품이 차량에서 수행하는 기능/역할에 대한 추정 설명 (예: '도어 개폐 시 충격을 완충하고 일정 위치에서 멈추도록 하는 스프링 지지 부품으로 추정')",
-    "assemblyLocation": "차량 내 장착 위치 추정 (예: 도어 트림 내부, 엔진룸, 시트 하부, 대시보드 내측, 판단 어려우면 '판단불가')",
-    "criticalityHint": "이 부품의 일반적 고장이 안전/기능에 미치는 영향 수준에 대한 참고 의견 (예: '직접적 안전부품은 아니나 기능 불량 시 조립불가/이음 발생 가능' 등). 과도하게 단정하지 않고 참고용으로만 서술",
-    "confidence": "판단 신뢰도: 높음/중간/낮음 (도면에 명시적 부품명·고객사명이 있으면 높음, 형상만으로 추정한 경우 중간 또는 낮음)"
-  },
-  "material": "재질 (예: SPCC t1.5, AL6061-T6, SUS304, ESN R-32113-032 / 3.6)",
-  "surface": "표면처리 (예: 아연도금 5μm, 무처리, 흑색산화)",
-  "scale": "척도 (예: 1:1, 1:2, 없음)",
-  "dimensions": [
+  "drawings": [
     {
-      "label": "치수 설명 (예: 전체 길이, 구멍 직경, 피치원 직경)",
-      "value": "치수값 (예: 120, φ8.5, M10)",
-      "unit": "단위 (예: mm, inch)",
-      "tolerance": "공차 (예: ±0.1, +0.05/-0, H7, 없음)",
-      "type": "SC 또는 CC 또는 일반",
-      "note": "비고 — 도면에 영어/독일어/일본어 주석이 함께 붙어 있으면 '원문 (한글번역)' 형식으로 둘 다 표기 (없으면 빈 문자열)"
+      "title": "부품명 또는 도면 제목 (원문이 외국어면 '원문 (한글번역)' 형식으로)",
+      "partIdentification": {
+        "category": "이 부품이 속하는 자동차 부품 대분류 (예: 파워트레인, 섀시/서스펜션, 내장 트림, 외장/바디, 전기/전자, 시트, 도어/래치, 사출/플라스틱 부품, 금속 프레스/성형 부품, 고무/씰링, 기타). 자동차 부품이 아니거나 판단 근거가 부족하면 '판단불가'",
+        "partName_kr": "부품의 한글 추정 명칭 (예: 스프링 컨트롤 로드, 도어 힌지 브라켓, 커넥터 하우징, 와이어링 클립, 시트벨트 가이드 등). 확신이 낮으면 '~로 추정' 표현 사용",
+        "function": "이 부품이 차량에서 수행하는 기능/역할에 대한 추정 설명 (예: '도어 개폐 시 충격을 완충하고 일정 위치에서 멈추도록 하는 스프링 지지 부품으로 추정')",
+        "assemblyLocation": "차량 내 장착 위치 추정 (예: 도어 트림 내부, 엔진룸, 시트 하부, 대시보드 내측, 판단 어려우면 '판단불가')",
+        "criticalityHint": "이 부품의 일반적 고장이 안전/기능에 미치는 영향 수준에 대한 참고 의견 (예: '직접적 안전부품은 아니나 기능 불량 시 조립불가/이음 발생 가능' 등). 과도하게 단정하지 않고 참고용으로만 서술",
+        "confidence": "판단 신뢰도: 높음/중간/낮음 (도면에 명시적 부품명·고객사명이 있으면 높음, 형상만으로 추정한 경우 중간 또는 낮음)"
+      },
+      "material": "재질 (예: SPCC t1.5, AL6061-T6, SUS304, ESN R-32113-032 / 3.6)",
+      "surface": "표면처리 (예: 아연도금 5μm, 무처리, 흑색산화)",
+      "scale": "척도 (예: 1:1, 1:2, 없음)",
+      "dimensions": [
+        {
+          "label": "치수 설명 (예: 전체 길이, 구멍 직경, 피치원 직경)",
+          "value": "치수값 (예: 120, φ8.5, M10)",
+          "unit": "단위 (예: mm, inch)",
+          "tolerance": "공차 (예: ±0.1, +0.05/-0, H7, 없음)",
+          "type": "SC 또는 CC 또는 일반",
+          "note": "비고 — 도면에 영어/독일어/일본어 주석이 함께 붙어 있으면 '원문 (한글번역)' 형식으로 둘 다 표기 (없으면 빈 문자열)"
+        }
+      ],
+      "geometrics": [
+        {
+          "symbol": "형상공차 기호명 (예: 진직도, 평면도, 직각도, 위치도, 원통도)",
+          "value": "공차값 (예: 0.05, ⌀0.1)",
+          "datum": "기준면 (예: A, A-B, 없음)"
+        }
+      ],
+      "sc_items": ["SC/CC 해당 치수 또는 특성 요약 목록 (없으면 빈 배열)"],
+      "notes": ["도면 주기사항 — 원문이 외국어면 반드시 '원문 (한글번역)' 형식으로 작성. 예: 'surfaces in the tool dash polished / Oberfläche im Werkzeug strichpoliert (금형 표면 줄무늬 연마 처리)', '面取り指示 (모따기 지시)'"],
+      "translations": [
+        {
+          "original": "도면에 적힌 외국어 원문 (영어/독일어/일본어 그대로)",
+          "language": "EN 또는 DE 또는 JP",
+          "korean": "정확한 한글 번역/의미 설명",
+          "context": "도면 내 위치나 어떤 항목에 대한 설명인지 (예: '치수 1 관련 주기', '표제란 비고', '재질 규격 코드 설명')"
+        }
+      ]
     }
   ],
-  "geometrics": [
-    {
-      "symbol": "형상공차 기호명 (예: 진직도, 평면도, 직각도, 위치도, 원통도)",
-      "value": "공차값 (예: 0.05, ⌀0.1)",
-      "datum": "기준면 (예: A, A-B, 없음)"
-    }
-  ],
-  "sc_items": ["SC/CC 해당 치수 또는 특성 요약 목록 (없으면 빈 배열)"],
-  "notes": ["도면 주기사항 — 원문이 외국어면 반드시 '원문 (한글번역)' 형식으로 작성. 예: 'surfaces in the tool dash polished / Oberfläche im Werkzeug strichpoliert (금형 표면 줄무늬 연마 처리)', '面取り指示 (모따기 지시)'"],
-  "translations": [
-    {
-      "original": "도면에 적힌 외국어 원문 (영어/독일어/일본어 그대로)",
-      "language": "EN 또는 DE 또는 JP",
-      "korean": "정확한 한글 번역/의미 설명",
-      "context": "도면 내 위치나 어떤 항목에 대한 설명인지 (예: '치수 1 관련 주기', '표제란 비고', '재질 규격 코드 설명')"
-    }
-  ]
+  "assemblyNotes": "ASSY 도면과 하위 자재 도면이 함께 첨부된 경우, 부품 간 조립관계·인터페이스·체결방식 등을 종합하여 요약 (도면이 1장뿐이거나 관계가 없으면 빈 문자열)"
 }
 
 중요 규칙 — 다국어 판독:
@@ -1510,7 +1542,8 @@ const DRW_SYSTEM = `당신은 기계도면 분석 전문가이며, 영어/독일
 - SC(안전특성): 안전·법규 관련 / CC(중요특성): 기능·조립 관련
 - 치수가 명확히 보이지 않으면 "판독불가"로 표기
 - 도면이 없거나 분석 불가능한 경우에도 JSON 형식은 유지
-- 응답 길이 관리(중요): 도면에 텍스트·치수가 매우 많아 모든 항목을 다 담으면 응답이 끊길 위험이 있는 경우, 완결된 JSON을 끝까지 출력하는 것을 최우선으로 한다. 이때 dimensions는 중요도가 높은 치수(공차가 있거나 SC/CC인 것, 표제란 핵심 항목) 위주로 선별하고, translations와 notes도 핵심 위주로 간결하게 정리해서 반드시 JSON이 끝까지(마지막 '}' 까지) 완성되도록 한다. 일부를 줄이더라도 절대 JSON 구조를 중간에서 끊지 않는다.
+- 도면이 여러 장 첨부된 경우(ASSY + 하위 자재 등): drawings 배열의 순서와 개수를 첨부된 도면 순서·개수와 반드시 일치시키고, 각 도면은 서로 독립적으로 정확히 분석한다. 동시에 ASSY 도면과 하위 자재 도면 사이의 조립관계·인터페이스·체결방식(예: 나사 체결, 스냅핏, 압입, 용접)을 함께 파악하여 assemblyNotes에 요약한다. 하위 자재 도면의 치수/재질이 ASSY 도면의 특정 구멍·좌면과 관련되면 그 관계도 assemblyNotes에 명시한다.
+- 응답 길이 관리(중요): 도면이 여러 장이거나 텍스트·치수가 매우 많아 모든 항목을 다 담으면 응답이 끊길 위험이 있는 경우, 완결된 JSON을 끝까지 출력하는 것을 최우선으로 한다. 이때 dimensions는 중요도가 높은 치수(공차가 있거나 SC/CC인 것, 표제란 핵심 항목) 위주로 선별하고, translations와 notes도 핵심 위주로 간결하게 정리해서 반드시 JSON이 끝까지(마지막 '}' 까지) 완성되도록 한다. 일부를 줄이더라도 절대 JSON 구조를 중간에서 끊지 않으며, drawings 배열이 도면 개수만큼 완성되는 것을 dimensions 세부 항목보다 우선한다.
 
 중요 규칙 — 부품 식별(partIdentification):
 - 도면의 형상, 표제란의 고객사/제조사명, 부품명, 재질, 표면처리, 도면번호 체계, 3D 형상 뷰 등을 종합적으로 보고 자동차 부품 여부와 종류를 추론한다.
@@ -1527,9 +1560,11 @@ const DRW_SYSTEM = `당신은 기계도면 분석 전문가이며, 영어/독일
 - 사양 테이블을 도면 전체에서 찾지 못한 경우에만 "판독불가"로 표기한다. 변수 기호만 보고 바로 판독불가로 단정하지 않는다.`;
 
 async function startDrawingAnalysis(){
-  if(!projFileData){ toast('도면을 먼저 업로드하세요','err'); return; }
+  if(!projDrawings.length){ toast('도면을 먼저 업로드하세요','err'); return; }
   if(!getKey()){ toast('API 키를 먼저 입력하세요','err'); return; }
-  const ESTIMATED_TOKENS=5000; // 진행률 계산용 예상 출력 토큰 (실측 아님, 체감용 추정치)
+  const n=projDrawings.length;
+  const ESTIMATED_TOKENS=Math.max(5000,n*5000); // 진행률 계산용 예상 출력 토큰 (실측 아님, 체감용 추정치)
+  const maxOut=Math.max(16000,Math.min(64000,n*16000));
   // 버튼을 로딩 상태(progress bar)로
   const row=document.getElementById('drwAnalyzeRow');
   const setBtnPct=(pct)=>{
@@ -1537,7 +1572,7 @@ async function startDrawingAnalysis(){
     row.innerHTML=`<div class="analyze-progress-wrap">
       <div class="analyze-progress-row">
         <div class="spinner" style="width:14px;height:14px;border-width:2px"></div>
-        <span>AI 도면 분석 중...</span>
+        <span>AI 도면 분석 중... (${n}개 종합)</span>
         <span class="analyze-progress-pct">${pct}%</span>
       </div>
       <div class="analyze-progress-bar"><div class="analyze-progress-fill" style="width:${pct}%"></div></div>
@@ -1550,7 +1585,7 @@ async function startDrawingAnalysis(){
     box.innerHTML=`<div class="spinner"></div>
       <div class="drw-loading-pct">${pct}%</div>
       <div class="drw-loading-bar"><div class="drw-loading-fill" style="width:${pct}%"></div></div>
-      <p style="font-size:12px;color:var(--text2)">도면을 분석 중입니다... (영어/독일어/일본어 텍스트 번역 포함)</p>`;
+      <p style="font-size:12px;color:var(--text2)">도면 ${n}개를 종합 분석 중입니다... (영어/독일어/일본어 텍스트 번역 포함)</p>`;
   };
   setBtnPct(0); setModalPct(0);
   // 분석 진행 중에는 힌트 입력 변경이 이번 분석에 반영되지 않으므로 입력창을 잠시 잠금
@@ -1559,20 +1594,26 @@ async function startDrawingAnalysis(){
   if(hintInput){ hintInput.disabled=true; hintInput.title='분석이 진행 중입니다. 분석이 끝난 후 입력하고 재분석을 눌러주세요.'; }
   if(hintLabel){ hintLabel.textContent='분석 중에는 입력이 반영되지 않습니다 (완료 후 재분석 시 반영)'; }
   try{
-    const isImg=projFileType.startsWith('image/');
-    const isPdf=projFileType==='application/pdf';
     const content=[];
-    if(isImg||isPdf){
-      content.push({type:isPdf?'document':'image',source:{type:'base64',media_type:projFileType,data:projFileData}});
-    }
+    projDrawings.forEach((d,i)=>{
+      const isImg=d.type&&d.type.startsWith('image/');
+      const isPdf=d.type==='application/pdf';
+      if(!isImg&&!isPdf) return;
+      const roleTxt=d.role==='assy'?'ASSY(조립도)':'하위 자재(구성부품)';
+      content.push({type:'text',text:`[도면 ${i+1}] 역할: ${roleTxt}${d.label?`, 도면번호/라벨: ${d.label}`:''}${d.name?`, 파일명: ${d.name}`:''}`});
+      content.push({type:isPdf?'document':'image',source:{type:'base64',media_type:d.type,data:d.data}});
+    });
     const hintLine = projPartHint && projPartHint.trim()
-      ? `\n\n사용자 제공 정보(참고): 이 부품은 "${projPartHint.trim()}"에 들어가는 부품입니다. 이 정보를 partIdentification에 최우선으로 반영해 주세요.`
+      ? `\n\n사용자 제공 정보(참고): 이 부품/어셈블리는 "${projPartHint.trim()}"에 들어갑니다. 이 정보를 partIdentification에 최우선으로 반영해 주세요.`
       : '';
-    content.push({type:'text',text:'이 도면을 분석하여 주요 치수, 공차, 재질, 형상공차, 주기사항을 추출해 주세요. 도면에 영어, 독일어, 일본어로 적힌 모든 텍스트(주기사항, 표제란, 약어, 기호 설명 포함)를 빠짐없이 정확히 읽고, 반드시 한글 번역을 함께 제공해 주세요. translations 배열에 원문과 한글 번역을 모두 정리해 주세요. 치수가 L***처럼 변수로 표기되어 있으면 도면 내 사양 테이블을 찾아 실제 값을 매칭해 주세요.'+hintLine});
+    const multiLine = n>1
+      ? `총 ${n}장의 도면이 첨부되었습니다(순서대로 도면 1~${n}). 각 도면을 독립적으로 정확히 분석하고, drawings 배열의 순서를 첨부 순서와 반드시 일치시켜 주세요. 또한 ASSY 도면과 하위 자재 도면 간의 조립관계를 assemblyNotes에 요약해 주세요.`
+      : '이 도면을 분석해 주세요.';
+    content.push({type:'text',text:`${multiLine} 주요 치수, 공차, 재질, 형상공차, 주기사항을 추출해 주세요. 도면에 영어, 독일어, 일본어로 적힌 모든 텍스트(주기사항, 표제란, 약어, 기호 설명 포함)를 빠짐없이 정확히 읽고, 반드시 한글 번역을 함께 제공해 주세요. translations 배열에 원문과 한글 번역을 모두 정리해 주세요. 치수가 L***처럼 변수로 표기되어 있으면 도면 내 사양 테이블을 찾아 실제 값을 매칭해 주세요.`+hintLine});
     const res=await fetch(API_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:16000,system:DRW_SYSTEM,messages:[{role:'user',content}],stream:true})
+      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:maxOut,system:DRW_SYSTEM,messages:[{role:'user',content}],stream:true})
     });
     if(!res.ok){
       let detail='';
@@ -1614,14 +1655,15 @@ async function startDrawingAnalysis(){
     // 응답 앞뒤에 설명 텍스트가 섞여 있을 경우 첫 '{' 이후만 사용 (끝은 잘렸을 수 있으니 그대로 둠)
     const firstBrace=clean.indexOf('{');
     if(firstBrace>0) clean=clean.slice(firstBrace);
+    let parsed;
     try{
-      projDrawingInfo=JSON.parse(clean);
+      parsed=JSON.parse(clean);
       if(wasTruncated) toast('응답이 길어 일부만 분석되었을 수 있습니다','err');
     }catch(parseErr){
       // 잘린 JSON 복구 시도 (배열/객체 강제로 닫기)
       try{
         const repaired=repairJson(clean);
-        projDrawingInfo=JSON.parse(repaired);
+        parsed=JSON.parse(repaired);
         toast('도면이 복잡해 일부 항목만 추출되었습니다. 필요하면 재분석하거나 직접 보완해 주세요','err');
       }catch(repairErr){
         console.error('도면분석 JSON 파싱/복구 실패. 원본 응답:',text);
@@ -1629,18 +1671,23 @@ async function startDrawingAnalysis(){
       }
     }
     setBtnPct(100); setModalPct(100);
-    await idbSet('proj_drawing_info',projDrawingInfo).catch(()=>{});
-    // 썸네일 버튼 갱신
-    renderDrawingThumb(projDrawingDataUrl||`data:${projFileType};base64,${projFileData}`,projFileType,projFileName,'저장됨');
-    toast('도면 분석 완료','ok');
-    openDrwModal(); // 자동으로 결과 열기
+    const results=parsed.drawings||[];
+    projDrawings.forEach((d,i)=>{ d.info=results[i]||d.info||null; });
+    projAssemblyNotes=parsed.assemblyNotes||'';
+    persistDrawings();
+    idbSet('proj_assembly_notes',projAssemblyNotes).catch(()=>{});
+    renderDrawingList();
+    toast(`도면 분석 완료 (${results.length}/${n})`,'ok');
+    if(_activeDrwId&&getDrawing(_activeDrwId)) openDrwModal(_activeDrwId); // 자동으로 결과 열기
+    else if(projDrawings.length) openDrwModal(projDrawings[0].id);
   }catch(e){
     toast('도면 분석 실패: '+e.message,'err');
-    renderDrawingThumb(projDrawingDataUrl||`data:${projFileType};base64,${projFileData}`,projFileType,projFileName,'저장됨');
+    renderDrawingList();
   }
 }
 
-function openDrwModal(){
+function openDrwModal(id){
+  _activeDrwId=id||_activeDrwId||(defaultDrawing()&&defaultDrawing().id);
   document.getElementById('drwModal').classList.add('open');
   renderDrwModal();
 }
@@ -1649,15 +1696,20 @@ function reAnalyzeDrawing(){ closeDrwModal(); startDrawingAnalysis(); }
 
 function renderDrwModal(){
   const body=document.getElementById('drwModalBody');
-  if(!projDrawingInfo){
-    body.innerHTML=`<div class="loading-box"><div class="spinner"></div><p style="font-size:12px;color:var(--text2)">분석 결과가 없습니다. AI 도면 분석을 실행하세요.</p></div>`;
+  const rec=getDrawing(_activeDrwId);
+  const switcherHtml=projDrawings.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${projDrawings.map(x=>`
+    <button class="btn${x.id===_activeDrwId?' primary':''}" style="font-size:11px;padding:5px 9px" onclick="openDrwModal('${x.id}')">
+      ${x.role==='assy'?'ASSY':'하위자재'}${x.label?' · '+esc(x.label):''}${!x.info?' (분석전)':''}
+    </button>`).join('')}</div>`:'';
+  if(!rec||!rec.info){
+    body.innerHTML=`${switcherHtml}<div class="loading-box"><div class="spinner" style="display:none"></div><p style="font-size:12px;color:var(--text2)">${rec?'이 도면은 아직 분석되지 않았습니다.':'분석 결과가 없습니다.'} AI 도면 분석을 실행하세요.</p></div>`;
     return;
   }
-  const d=projDrawingInfo;
-  const isImg=projFileType&&projFileType.startsWith('image/');
-  const previewHtml=isImg&&projDrawingDataUrl
-    ?`<img src="${projDrawingDataUrl}" alt="도면" style="max-width:100%;max-height:300px;object-fit:contain;border-radius:var(--r)">`
-    :`<div style="text-align:center;padding:40px"><i class="ti ti-file-type-pdf" style="font-size:48px;color:var(--danger);display:block;margin-bottom:8px"></i><p style="font-size:12px;color:var(--text2)">${projFileName||'도면'}</p></div>`;
+  const d=rec.info;
+  const isImg=rec.type&&rec.type.startsWith('image/');
+  const previewHtml=isImg&&rec.dataUrl
+    ?`<img src="${rec.dataUrl}" alt="도면" style="max-width:100%;max-height:300px;object-fit:contain;border-radius:var(--r)">`
+    :`<div style="text-align:center;padding:40px"><i class="ti ti-file-type-pdf" style="font-size:48px;color:var(--danger);display:block;margin-bottom:8px"></i><p style="font-size:12px;color:var(--text2)">${rec.name||'도면'}</p></div>`;
 
   const typeClass=t=>t==='SC'?'sc':t==='CC'?'cc':'';
   const typeBadge=t=>t==='SC'
@@ -1704,9 +1756,12 @@ function renderDrwModal(){
     </div>`:'';
 
   body.innerHTML=`
+    ${switcherHtml}
     <div class="drw-preview">${previewHtml}</div>
 
     <div class="drw-meta-row">
+      <span class="badge${rec.role==='assy'?' badge-ai':''}" style="font-size:9px">${rec.role==='assy'?'ASSY':'하위자재'}</span>
+      ${rec.label?`<span class="drw-meta-chip">${esc(rec.label)}</span>`:''}
       ${d.title?`<span class="drw-meta-chip" style="font-weight:600">${esc(d.title)}</span>`:''}
       ${d.material&&d.material!=='없음'?`<span class="drw-meta-chip mat"><i class="ti ti-layers-subtract" style="font-size:11px"></i> ${esc(d.material)}</span>`:''}
       ${d.surface&&d.surface!=='없음'?`<span class="drw-meta-chip surf"><i class="ti ti-paint" style="font-size:11px"></i> ${esc(d.surface)}</span>`:''}
@@ -1751,6 +1806,11 @@ function renderDrwModal(){
           </tr>`).join('')}</tbody>
       </table>
     </div>`:''}
+
+    ${projAssemblyNotes?`<div class="drw-section">
+      <div class="drw-section-title"><i class="ti ti-affiliate"></i>조립 관계 (ASSY ↔ 하위 자재)</div>
+      <p style="font-size:12px;color:var(--text2);line-height:1.7">${esc(projAssemblyNotes)}</p>
+    </div>`:''}
   `;
 }
 
@@ -1760,19 +1820,21 @@ let _vScale=1, _vOx=0, _vOy=0;
 let _vDragging=false, _vLx=0, _vLy=0;
 let _vPdfUrl=null;
 
-function openViewer(){
-  if(!projFileData){ toast('도면이 없습니다','err'); return; }
-  const isImg=projFileType&&projFileType.startsWith('image/');
-  const isPdf=projFileType==='application/pdf';
+function openViewer(id){
+  _viewerDrawingId=id||_viewerDrawingId||(defaultDrawing()&&defaultDrawing().id);
+  const rec=getDrawing(_viewerDrawingId);
+  if(!rec){ toast('도면이 없습니다','err'); return; }
+  const isImg=rec.type&&rec.type.startsWith('image/');
+  const isPdf=rec.type==='application/pdf';
   const viewer=document.getElementById('drwViewer');
   const imgWrap=document.getElementById('imgWrap');
   const pdfWrap=document.getElementById('pdfWrap');
-  document.getElementById('viewerTitle').textContent=projFileName||'도면';
+  document.getElementById('viewerTitle').textContent=rec.name||'도면';
   if(isImg){
     imgWrap.style.display='flex';
     pdfWrap.style.display='none';
     const img=document.getElementById('viewerImg');
-    img.src=projDrawingDataUrl||`data:${projFileType};base64,${projFileData}`;
+    img.src=rec.dataUrl||`data:${rec.type};base64,${rec.data}`;
     img.onload=()=>{ viewerFit(); };
     document.getElementById('viewerZoomCtrl').style.display='flex';
     document.getElementById('viewerHint').textContent='휠: 확대/축소  ·  드래그: 이동';
@@ -1784,7 +1846,7 @@ function openViewer(){
     document.getElementById('viewerHint').textContent='';
     // blob URL 생성 (data URL보다 안정적)
     if(_vPdfUrl) URL.revokeObjectURL(_vPdfUrl);
-    const bytes=atob(projFileData);
+    const bytes=atob(rec.data);
     const arr=new Uint8Array(bytes.length);
     for(let i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
     const blob=new Blob([arr],{type:'application/pdf'});
@@ -1924,89 +1986,139 @@ function idbSet(key,val){return openDB().then(db=>new Promise((res,rej)=>{const 
 function idbGet(key){return openDB().then(db=>new Promise((res,rej)=>{const tx=db.transaction('files','readonly');const r=tx.objectStore('files').get(key);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}));}
 function idbDel(key){return openDB().then(db=>new Promise((res,rej)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').delete(key);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);}));}
 
-/* ─ Project drawing upload (sidebar, shared across all processes) ─ */
+/* ─ Project drawing upload (sidebar, shared across all processes — ASSY + 하위 자재 다중 등록) ─ */
 function onProjOver(e){ e.preventDefault(); document.getElementById('projUploadZone').classList.add('over'); }
 function onProjLeave(e){ document.getElementById('projUploadZone').classList.remove('over'); }
 function onProjDrop(e){
   e.preventDefault();
   document.getElementById('projUploadZone').classList.remove('over');
-  if(e.dataTransfer.files[0]) setProjFile(e.dataTransfer.files[0]);
+  Array.from(e.dataTransfer.files||[]).forEach(addProjDrawing);
 }
-function onProjFileSel(e){ if(e.target.files[0]) setProjFile(e.target.files[0]); }
+function onProjFileSel(e){ Array.from(e.target.files||[]).forEach(addProjDrawing); e.target.value=''; }
 
-function renderDrawingThumb(dataUrl, type, name, sizeStr){
+function addProjDrawing(file){
+  const reader=new FileReader();
+  reader.onload=(ev)=>{
+    const id='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+    const rec={
+      id, role: projDrawings.length===0?'assy':'sub', label:'',
+      name:file.name, type:file.type,
+      data:ev.target.result.split(',')[1], dataUrl:ev.target.result,
+      info:null
+    };
+    projDrawings.push(rec);
+    persistDrawings();
+    renderDrawingList();
+    saveMeta();
+  };
+  reader.readAsDataURL(file);
+}
+function persistDrawings(){
+  const toSave=projDrawings.map(d=>({id:d.id,role:d.role,label:d.label,name:d.name,type:d.type,data:d.data,info:d.info}));
+  idbSet('proj_drawings',toSave).catch(()=>{});
+}
+function setDrawingRole(id,role){
+  const d=getDrawing(id); if(!d) return;
+  d.role=role;
+  persistDrawings();
+}
+function setDrawingLabel(id,label){
+  const d=getDrawing(id); if(!d) return;
+  d.label=label;
+  persistDrawings();
+}
+function removeProjDrawing(id){
+  projDrawings=projDrawings.filter(d=>d.id!==id);
+  procs.forEach(p=>{ if(p.drawingId===id) p.drawingId=null; });
+  persistDrawings();
+  saveAll();
+  renderDrawingList();
+}
+
+function renderDrawingList(){
   const zone=document.getElementById('projUploadZone');
+  const label=document.getElementById('projUploadLabel');
   const thumb=document.getElementById('projThumb');
   const preHintRow=document.getElementById('partHintRowPre');
-  zone.style.display='none';
+  if(!projDrawings.length){
+    zone.style.display='block';
+    if(label) label.textContent='PDF / 이미지 업로드';
+    thumb.style.display='none';
+    thumb.innerHTML='';
+    if(preHintRow) preHintRow.style.display='block';
+    updateModalDrawingStatus();
+    return;
+  }
+  zone.style.display='block';
+  if(label) label.textContent='+ 도면 추가 (ASSY 또는 하위 자재)';
   thumb.style.display='block';
   if(preHintRow) preHintRow.style.display='none'; // 업로드 후에는 썸네일 쪽 입력창만 표시
-  const isImg=type.startsWith('image/');
-  const hasDrw=!!projDrawingInfo;
-  thumb.innerHTML=`<div class="pdf-thumb" style="padding:8px 10px">
-    ${isImg
-      ? `<img src="${dataUrl}" alt="도면" style="max-height:90px;width:100%;object-fit:contain;border-radius:3px;margin-bottom:4px;cursor:pointer" onclick="openDrwModal()" title="클릭하여 도면 분석 보기">`
-      : `<i class="ti ti-file-type-pdf" style="font-size:22px;color:var(--danger);display:block;margin-bottom:4px"></i>`}
-    <div class="fname" style="font-size:10px">
-      <i class="ti ti-check" style="color:var(--success)"></i> ${name}<br>
-      <span style="color:var(--text3)">${sizeStr} · 전 공정 공통 적용</span>
-      <button onclick="clearProjFile()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;margin-left:4px" title="도면 삭제"><i class="ti ti-x"></i></button>
-    </div>
-    <div class="part-hint-row" id="partHintRow" style="margin-top:6px">
-      <label class="part-hint-label" for="partHintInput">이 부품이 어디에 들어가는지 알면 입력</label>
+
+  const cards=projDrawings.map(d=>{
+    const isImg=d.type&&d.type.startsWith('image/');
+    return `<div class="pdf-thumb" style="padding:8px 10px;margin-bottom:6px;text-align:left">
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
+        <select onchange="setDrawingRole('${d.id}',this.value)" style="font-size:9.5px;padding:2px 3px;border-radius:4px;border:1px solid var(--border);background:var(--bg3);color:var(--text2)">
+          <option value="assy"${d.role==='assy'?' selected':''}>ASSY</option>
+          <option value="sub"${d.role==='sub'?' selected':''}>하위자재</option>
+        </select>
+        <input type="text" value="${esc(d.label||'')}" placeholder="도면번호" onchange="setDrawingLabel('${d.id}',this.value)" style="flex:1;min-width:0;font-size:10px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg3);color:var(--text1)">
+        <button onclick="removeProjDrawing('${d.id}')" title="도면 삭제" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;flex-shrink:0"><i class="ti ti-x"></i></button>
+      </div>
+      ${isImg
+        ? `<img src="${d.dataUrl}" alt="도면" style="max-height:80px;width:100%;object-fit:contain;border-radius:3px;margin-bottom:4px;cursor:pointer" onclick="openDrwModal('${d.id}')" title="클릭하여 도면 분석 보기">`
+        : `<i class="ti ti-file-type-pdf" style="font-size:20px;color:var(--danger);display:block;margin-bottom:4px;cursor:pointer" onclick="openViewer('${d.id}')"></i>`}
+      <div class="fname" style="font-size:10px">
+        <i class="ti ti-check" style="color:var(--success)"></i> ${esc(d.name)}<br>
+        <span style="color:${d.info?'var(--success)':'var(--text3)'}">${d.info?'분석 완료':'분석 대기'}</span>
+      </div>
+      <div class="analyze-btn-row" style="margin-top:5px">
+        <button class="btn" style="flex:1;font-size:10.5px;padding:4px 6px" onclick="openViewer('${d.id}')"><i class="ti ti-zoom-in" style="font-size:11px"></i> 보기</button>
+        ${d.info?`<button class="btn" style="flex:1;font-size:10.5px;padding:4px 6px" onclick="openDrwModal('${d.id}')"><i class="ti ti-eye" style="font-size:11px"></i> 결과</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const anyInfo=projDrawings.some(d=>d.info);
+  thumb.innerHTML=`
+    <div class="part-hint-row" id="partHintRow" style="margin-bottom:8px">
+      <label class="part-hint-label" for="partHintInput">이 부품/어셈블리가 어디에 들어가는지 알면 입력</label>
       <input type="text" id="partHintInput" class="part-hint-input"
         placeholder="예: 전동트렁크, 도어 힌지"
         value="${esc(projPartHint||'')}"
         oninput="projPartHint=this.value;idbSet('proj_part_hint',this.value).catch(()=>{});syncPartHintInputs()"
         title="AI 도면/공정 분석 시 참고 정보로 함께 활용됩니다">
     </div>
+    ${cards}
     <div class="analyze-btn-row" id="drwAnalyzeRow">
-      <button class="btn" style="flex:1;font-size:11px;padding:5px 8px" onclick="openViewer()"><i class="ti ti-zoom-in" style="font-size:12px"></i> 도면 보기</button>
-      ${hasDrw
-        ? `<button class="btn" style="flex:1;font-size:11px;padding:5px 8px" onclick="openDrwModal()"><i class="ti ti-eye" style="font-size:12px"></i> 분석 결과</button>
-           <button class="btn" style="font-size:11px;padding:5px 8px" onclick="startDrawingAnalysis()" title="재분석"><i class="ti ti-refresh" style="font-size:12px"></i></button>`
-        : `<button class="btn" style="flex:1;font-size:11px;padding:5px 8px" onclick="startDrawingAnalysis()"><i class="ti ti-brain" style="font-size:12px"></i> AI 분석</button>`}
-    </div>
-  </div>`;
+      <button class="btn primary" style="flex:1;font-size:11px;padding:6px 8px" onclick="startDrawingAnalysis()">
+        <i class="ti ti-brain" style="font-size:12px"></i> ${anyInfo?'전체 재분석':`AI 분석 시작 (${projDrawings.length}개 도면 종합)`}
+      </button>
+    </div>`;
   updateModalDrawingStatus();
 }
 
-function setProjFile(file){
-  projFileType=file.type;
-  projFileName=file.name;
-  const reader=new FileReader();
-  reader.onload=(ev)=>{
-    projFileData=ev.target.result.split(',')[1];
-    projDrawingDataUrl=ev.target.result;
-    projDrawingInfo=null; // 새 파일 → 분석 초기화
-    idbSet('proj_drawing',{data:projFileData,type:projFileType,name:projFileName}).catch(()=>{});
-    renderDrawingThumb(ev.target.result, file.type, file.name, `${(file.size/1024).toFixed(1)}KB`);
-    saveMeta();
-    // API 키 있으면 자동 분석
-    if(getKey()) startDrawingAnalysis();
-  };
-  reader.readAsDataURL(file);
-}
-function clearProjFile(){
-  projFileData=null; projFileType=null; projFileName=null;
-  projDrawingInfo=null; projDrawingDataUrl=null; projPartHint='';
+function clearAllDrawings(){
+  projDrawings=[];
+  projAssemblyNotes='';
+  projPartHint='';
+  idbDel('proj_drawings').catch(()=>{});
+  idbDel('proj_assembly_notes').catch(()=>{});
+  idbDel('proj_part_hint').catch(()=>{});
+  // 구버전(단일 도면) 저장 키도 함께 정리
   idbDel('proj_drawing').catch(()=>{});
   idbDel('proj_drawing_info').catch(()=>{});
-  idbDel('proj_part_hint').catch(()=>{});
-  document.getElementById('projUploadZone').style.display='block';
-  document.getElementById('projThumb').style.display='none';
-  document.getElementById('projThumb').innerHTML='';
   document.getElementById('projFileIn').value='';
-  const preHintRow=document.getElementById('partHintRowPre');
-  if(preHintRow) preHintRow.style.display='block';
   syncPartHintInputs();
-  updateModalDrawingStatus();
+  renderDrawingList();
 }
 function updateModalDrawingStatus(){
   const el=document.getElementById('modalDrawingStatus');
   if(!el) return;
-  if(projFileData){
-    el.innerHTML=`<i class="ti ti-check" style="color:var(--success);font-size:12px"></i> <span style="color:var(--success)">${projFileName}</span>`;
+  if(projDrawings.length){
+    const assyN=projDrawings.filter(d=>d.role==='assy').length;
+    const subN=projDrawings.length-assyN;
+    el.innerHTML=`<i class="ti ti-check" style="color:var(--success);font-size:12px"></i> <span style="color:var(--success)">도면 ${projDrawings.length}개 (ASSY ${assyN} · 하위자재 ${subN})</span>`;
   } else {
     el.innerHTML=`<span style="color:var(--text3)">도면 없음</span>`;
   }
@@ -2025,6 +2137,7 @@ function openAdd(){
   document.getElementById('nName').value='';
   document.getElementById('nFunc').value='';
   document.getElementById('nKeywords').value='';
+  document.getElementById('nDrawing').innerHTML=drawingSelectOptions('');
   setEquip('auto');
   updateKwSuggest('add');
   document.getElementById('addModal').classList.add('open');
@@ -2073,11 +2186,12 @@ async function addProc(){
   const func=document.getElementById('nFunc').value.trim();
   const equipType=document.getElementById('nEquipAuto').classList.contains('sel-auto')?'auto':'manual';
   const keywords=document.getElementById('nKeywords').value.trim();
+  const drawingId=document.getElementById('nDrawing').value||null;
   if(!name){ toast('공정명을 입력하세요','err'); return; }
   if(!func){ toast('공정 기능/특성을 입력하세요','err'); return; }
   if(!getKey()){ toast('API 키를 먼저 입력하세요','err'); return; }
   closeAdd();
-  const proc={num,name,func,equipType,keywords,status:'analyzing',pfmea:[],cp:[]};
+  const proc={num,name,func,equipType,keywords,drawingId,status:'analyzing',pfmea:[],cp:[]};
   procs.push(proc);
   cur=procs.length-1;
   renderList(); renderContent();
@@ -2209,11 +2323,16 @@ function extractPartialJson(str){
 function buildPrompt(p){
   const equipLabel=p.equipType==='manual'?'Manual(수동) 공정 — 작업자 개입, 육안검사, 인적오류 중심으로 분석':'AUTO(자동설비) 공정 — 설비 파라미터, 센서, 자동검출, PLC 에러 중심으로 분석';
   const kwLine=p.keywords?`\n- 핵심 키워드 / 관리포인트: ${p.keywords}`:'';
+  // 이 공정에 적용할 도면 결정 (지정된 도면 우선, 없으면 ASSY 우선 기본 도면)
+  const drw=drawingForProc(p);
+  const info=drw&&drw.info;
+  const drwLabel=drw?`${drw.role==='assy'?'ASSY':'하위자재'}${drw.label?' · '+drw.label:''}`:'';
+
   // 도면 분석에서 얻은 부품 식별 정보가 있으면 함께 전달 (더 구체적인 PFMEA 작성에 활용)
-  const pid=projDrawingInfo&&projDrawingInfo.partIdentification;
+  const pid=info&&info.partIdentification;
   let partLine='';
   if(pid&&pid.category&&pid.category!=='판단불가'){
-    partLine=`\n\n참고 — 도면 분석으로 추정된 부품 정보 (신뢰도: ${pid.confidence||'중간'}):
+    partLine=`\n\n참고 — 도면 분석으로 추정된 부품 정보 (도면: ${drwLabel}, 신뢰도: ${pid.confidence||'중간'}):
 - 부품 분류: ${pid.category}
 - 추정 부품명: ${pid.partName_kr||'미상'}
 - 추정 기능: ${pid.function||'미상'}
@@ -2222,26 +2341,31 @@ function buildPrompt(p){
 위 부품 정보를 참고하여, 이 부품/기능에 특화된 더 구체적이고 현실적인 고장모드·원인·관리방법을 도출하세요. 단, 신뢰도가 낮은 추정이므로 도면의 실제 치수·공차·형상 정보가 부품 정보와 상충하면 도면 데이터를 우선하세요.`;
   }
 
+  // 여러 도면(ASSY + 하위 자재)이 등록되어 있고 조립관계 요약이 있으면 참고로 전달
+  const assyLine = projAssemblyNotes && projDrawings.length>1
+    ? `\n\n참고 — 등록된 도면들의 조립관계 (ASSY ↔ 하위 자재): ${projAssemblyNotes}`
+    : '';
+
   // 도면 분석에서 얻은 재질/표면처리 정보를 함께 전달
   // → 원재료 입고검사, 사출/성형 공정처럼 재질 자체가 핵심 관리대상인 공정에서 빠짐없이 반영되도록 함
   let materialLine='';
-  if(projDrawingInfo&&projDrawingInfo.material&&projDrawingInfo.material!=='없음'&&projDrawingInfo.material!=='판독불가'){
+  if(info&&info.material&&info.material!=='없음'&&info.material!=='판독불가'){
     const isMaterialCriticalProcess = /원재료|수입검사|입고|레진|소재|재질|성형|사출|소재검사/.test(p.name+' '+p.func);
     materialLine=`\n\n참고 — 도면에 명시된 재질/표면처리 정보:
-- 재질: ${projDrawingInfo.material}
-- 표면처리: ${projDrawingInfo.surface&&projDrawingInfo.surface!=='없음'?projDrawingInfo.surface:'명시 없음'}
+- 재질: ${info.material}
+- 표면처리: ${info.surface&&info.surface!=='없음'?info.surface:'명시 없음'}
 ${isMaterialCriticalProcess
-  ? '이 공정명/기능에 "원재료/입고/수입검사/레진/소재/재질/성형/사출" 등의 키워드가 포함되어 있어, 위 재질 정보가 이 공정의 핵심 관리 대상입니다. 사용자가 공정 기능에 재질명을 직접 적지 않았더라도, 도면에 명시된 재질(' + projDrawingInfo.material + ')을 기준으로 고장모드(예: 재질 오투입, 재질 증명서 누락, 재질 규격 불일치, 수분율/물성 불량 등)와 CP 관리항목(예: 재질 증명서 확인, 적외선분광분석기(FT-IR) 동등성 확인, 입고 성상검사)을 구체적으로 작성하세요.'
+  ? '이 공정명/기능에 "원재료/입고/수입검사/레진/소재/재질/성형/사출" 등의 키워드가 포함되어 있어, 위 재질 정보가 이 공정의 핵심 관리 대상입니다. 사용자가 공정 기능에 재질명을 직접 적지 않았더라도, 도면에 명시된 재질(' + info.material + ')을 기준으로 고장모드(예: 재질 오투입, 재질 증명서 누락, 재질 규격 불일치, 수분율/물성 불량 등)와 CP 관리항목(예: 재질 증명서 확인, 적외선분광분석기(FT-IR) 동등성 확인, 입고 성상검사)을 구체적으로 작성하세요.'
   : '이 공정과 관련 있는 경우에만 재질 정보를 참고하여 재질 관련 고장모드(예: 재질 강도 부족, 표면처리 불량 등)를 포함하세요.'}`;
   }
 
   // 도면 분석에서 추출된 실제 치수/공차/SC·CC/GD&T 데이터를 구조화하여 전달
   // → CP의 spec/feat/char 필드가 도면 분석 결과와 정확히 일치하도록 함 (도면을 다시 읽어 추측하지 않도록)
   let dimLine='';
-  if(projDrawingInfo){
-    const dims=projDrawingInfo.dimensions||[];
-    const geos=projDrawingInfo.geometrics||[];
-    const scs=projDrawingInfo.sc_items||[];
+  if(info){
+    const dims=info.dimensions||[];
+    const geos=info.geometrics||[];
+    const scs=info.sc_items||[];
     if(dims.length||geos.length||scs.length){
       const dimRows=dims.map(d=>{
         const tolStr=d.tolerance&&d.tolerance!=='없음'?` ${d.tolerance}`:'';
@@ -2250,7 +2374,7 @@ ${isMaterialCriticalProcess
       }).join('\n');
       const geoRows=geos.map(g=>`  - ${g.symbol}: ${g.value}${g.datum?` (데이텀 ${g.datum})`:''}`).join('\n');
       const scRows=scs.map(s=>`  - ${s}`).join('\n');
-      dimLine=`\n\n참고 — 도면 분석에서 추출된 실제 치수/공차 데이터 (CP의 spec/feat 작성 시 이 값을 그대로 인용할 것, 도면을 다시 추측하지 말 것):
+      dimLine=`\n\n참고 — 도면 분석에서 추출된 실제 치수/공차 데이터 (도면: ${drwLabel}, CP의 spec/feat 작성 시 이 값을 그대로 인용할 것, 도면을 다시 추측하지 말 것):
 ${dimRows?'[치수/공차 목록]\n'+dimRows:''}
 ${geoRows?'\n[형상·위치공차(GD&T)]\n'+geoRows:''}
 ${scRows?'\n[도면에 표시된 SC/CC 핵심특성]\n'+scRows:''}
@@ -2267,8 +2391,8 @@ CP 작성 규칙(중요):
 - 공정번호: ${p.num||'N/A'}
 - 공정명: ${p.name}
 - 공정 기능/특성: ${p.func}
-- 장비 타입: ${equipLabel}${kwLine}${partLine}${materialLine}${dimLine}
-${p.fileData||projFileData?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악하여 ':''}
+- 장비 타입: ${equipLabel}${kwLine}${partLine}${assyLine}${materialLine}${dimLine}
+${drw?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악하여 ':''}
 이 공정에 대한 PFMEA와 Control Plan을 AIAG-VDA 5th Edition 기준으로 작성해주세요.
 실제 자동차 부품 양산 현장에서 발생 가능한 구체적인 내용으로 전문적으로 작성하세요.`;
 }
@@ -2297,9 +2421,10 @@ async function analyze(idx){
   setPct(0);
 
   try{
-    // 프로젝트 공통 도면 우선, 없으면 공정별 도면
-    const drawingData = projFileData || p.fileData;
-    const drawingType = projFileType || p.fileType;
+    // 이 공정에 지정된 도면 우선, 없으면 ASSY 우선 기본 도면
+    const drw=drawingForProc(p);
+    const drawingData = drw&&drw.data;
+    const drawingType = drw&&drw.type;
     const isImg=drawingType&&drawingType.startsWith('image/');
     const isPdf=drawingType==='application/pdf';
     const content=[];
@@ -2584,7 +2709,7 @@ function resetProject(){
   ['partNum','partName','customer','plant','pfmeaNo'].forEach(k=>{
     document.getElementById(k).value='';
   });
-  clearProjFile();
+  clearAllDrawings();
   localStorage.removeItem('pfmea_state');
   renderList();
   renderWelcome();
@@ -2598,18 +2723,31 @@ function initApp(){
   if(procs.length>0){ selProc(cur>=0?cur:0); } else { renderWelcome(); }
   checkApiBar();
   updateApiKeyBtn();
-  idbGet('proj_drawing').then(saved=>{
-    if(saved){
-      projFileData=saved.data; projFileType=saved.type; projFileName=saved.name;
-      projDrawingDataUrl=`data:${saved.type};base64,${saved.data}`;
+  idbGet('proj_drawings').then(saved=>{
+    if(saved&&saved.length){
+      projDrawings=saved.map(d=>({...d,dataUrl:`data:${d.type};base64,${d.data}`}));
+      return null;
     }
-    return idbGet('proj_drawing_info');
-  }).then(info=>{
-    if(info){ projDrawingInfo=info; }
+    // 구버전(단일 도면) 데이터 마이그레이션
+    return Promise.all([idbGet('proj_drawing'),idbGet('proj_drawing_info')]).then(([legacyFile,legacyInfo])=>{
+      if(legacyFile){
+        projDrawings=[{
+          id:'d'+Date.now().toString(36), role:'assy', label:'',
+          name:legacyFile.name, type:legacyFile.type, data:legacyFile.data,
+          dataUrl:`data:${legacyFile.type};base64,${legacyFile.data}`,
+          info:legacyInfo||null
+        }];
+        persistDrawings();
+        idbDel('proj_drawing').catch(()=>{});
+        idbDel('proj_drawing_info').catch(()=>{});
+      }
+    });
+  }).then(()=>idbGet('proj_assembly_notes')).then(notes=>{
+    if(notes) projAssemblyNotes=notes;
     return idbGet('proj_part_hint');
   }).then(hint=>{
     if(hint) projPartHint=hint;
-    if(projFileData) renderDrawingThumb(projDrawingDataUrl, projFileType, projFileName, '저장됨');
+    renderDrawingList();
     syncPartHintInputs(); // 도면 유무와 관계없이 입력창에 저장된 힌트 복원
   }).catch(()=>{});
 }
