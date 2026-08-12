@@ -31,9 +31,61 @@
 body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg1);color:var(--text1);min-height:100vh;font-size:14px;overflow:hidden}
 
 /* ── Layout ─────────────────────────────────────────── */
-.app{display:flex;height:100vh;overflow:hidden}
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.app-body{display:flex;flex:1;min-height:0;overflow:hidden}
 
-/* ── Sidebar ─────────────────────────────────────────── */
+/* ── Top meta bar: project info, laid out horizontally to save vertical space ── */
+.topmeta{
+  display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;
+  padding:9px 18px;background:var(--bg2);border-bottom:1px solid var(--border);
+  flex-shrink:0;position:relative;z-index:20;
+}
+.topmeta-logo{display:flex;align-items:center;gap:9px;padding-bottom:1px;margin-right:6px}
+.logo-icon{
+  width:34px;height:34px;border-radius:9px;
+  background:linear-gradient(135deg,#4f7cff,#8b5cf6);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:#fff;flex-shrink:0
+}
+.topmeta-logo h1{font-size:13px;font-weight:600;line-height:1.2;white-space:nowrap}
+.topmeta-logo p{font-size:9.5px;color:var(--text3);margin-top:1px;white-space:nowrap}
+.topmeta-field{display:flex;flex-direction:column;gap:4px}
+.topmeta-field label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:600;white-space:nowrap}
+.topmeta-field input{
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+  padding:6px 8px;color:var(--text1);font-size:12.5px;font-weight:500;outline:none;
+  transition:border-color .15s;width:100%;
+}
+.topmeta-field input:focus{border-color:var(--accent)}
+#partNum{width:100px}
+#partName{width:170px}
+#customer{width:110px}
+#plant{width:110px}
+#pfmeaNo{width:150px}
+.topmeta-rules{position:relative}
+.topmeta-rules-btn{
+  display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);padding:7px 10px;color:var(--text2);font-size:12px;cursor:pointer;
+  white-space:nowrap;transition:.15s;
+}
+.topmeta-rules-btn:hover{border-color:var(--accent);color:var(--accent)}
+.rules-badge{width:6px;height:6px;border-radius:50%;background:var(--accent2);display:none}
+.rules-badge.on{display:inline-block}
+.topmeta-rules-panel{
+  display:none;position:absolute;top:calc(100% + 6px);right:0;width:360px;max-width:80vw;
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);
+  padding:12px;box-shadow:0 10px 28px rgba(20,30,70,.16);z-index:30;
+}
+.topmeta-rules-panel.open{display:block}
+.topmeta-rules-panel label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:600;display:block;margin-bottom:6px}
+.topmeta-rules-panel textarea{
+  width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+  padding:8px 9px;color:var(--text1);font-size:12.5px;outline:none;resize:vertical;font-family:inherit;
+  transition:border-color .15s;
+}
+.topmeta-rules-panel textarea:focus{border-color:var(--accent)}
+
+/* ── Sidebar (drawings only) ─────────────────────────── */
 .sidebar-wrap{
   display:flex;flex-shrink:0;transition:transform .25s;
   box-shadow:2px 0 16px rgba(61,99,245,.07);
@@ -45,25 +97,16 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 }
 .sidebar::-webkit-scrollbar{width:4px}
 .sidebar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-.sidebar-header{padding:16px;border-bottom:1px solid var(--border)}
-.logo-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-.logo-icon{
-  width:34px;height:34px;border-radius:9px;
-  background:linear-gradient(135deg,#4f7cff,#8b5cf6);
-  display:flex;align-items:center;justify-content:center;
-  font-size:16px;color:#fff;flex-shrink:0
-}
-.logo-row h1{font-size:14px;font-weight:600;line-height:1.2}
-.logo-row p{font-size:10px;color:var(--text3);margin-top:1px}
 .proj-block{padding:10px 14px;border-bottom:1px solid var(--border)}
 .proj-block label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;margin-top:10px}
 .proj-block label:first-child{margin-top:0}
-.proj-block input{
+.proj-block input,.proj-block textarea{
   width:100%;background:var(--bg3);border:1px solid var(--border);
   border-radius:var(--r);padding:7px 9px;color:var(--text1);
-  font-size:13px;font-weight:500;outline:none;transition:border-color .15s
+  font-size:13px;font-weight:500;outline:none;transition:border-color .15s;
+  font-family:inherit
 }
-.proj-block input:focus{border-color:var(--accent)}
+.proj-block input:focus,.proj-block textarea:focus{border-color:var(--accent)}
 
 /* ── Process list column (separate from project/drawings sidebar) ── */
 .proc-col{
@@ -556,6 +599,11 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
   .proc-col{border-right:none;border-top:1px solid var(--border)}
   .menu-btn{display:flex!important}
   .row2{grid-template-columns:1fr}
+  .topmeta{gap:8px;padding:8px 12px}
+  .topmeta-field{flex:1 1 130px}
+  .topmeta-field input{width:100%}
+  #partNum,#partName,#customer,#plant,#pfmeaNo{width:auto}
+  .topmeta-rules-panel{right:auto;left:0}
 }
 .menu-btn{display:none;background:none;border:none;color:var(--text1);cursor:pointer;font-size:20px;margin-right:4px}
 </style>
@@ -567,31 +615,57 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
 </div>
 
 <div class="app" id="appRoot" style="display:none">
-  <div class="sidebar-wrap" id="sidebarWrap">
-  <!-- ── Sidebar: 프로젝트 정보 + 도면 ── -->
-  <div class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <div class="logo-row">
-        <div class="logo-icon"><i class="ti ti-analyze" style="font-size:16px"></i></div>
-        <div>
-          <h1>PFMEA / CP AI</h1>
-          <p>AIAG-VDA 5th Edition</p>
-        </div>
+  <!-- ── Top meta bar: 프로젝트 정보 (가로 배치, 세로 공간 절약) ── -->
+  <div class="topmeta" id="topMeta">
+    <div class="topmeta-logo">
+      <div class="logo-icon"><i class="ti ti-analyze" style="font-size:16px"></i></div>
+      <div>
+        <h1>PFMEA / CP AI</h1>
+        <p>AIAG-VDA 5th Edition</p>
       </div>
     </div>
-
-    <div class="proj-block">
+    <div class="topmeta-field">
       <label>품번</label>
       <input id="partNum" placeholder="예) AA-12345-A" oninput="saveMeta()">
+    </div>
+    <div class="topmeta-field">
       <label>품명</label>
       <input id="partName" placeholder="예) 커넥터 브라켓" oninput="saveMeta()">
+    </div>
+    <div class="topmeta-field">
       <label>고객사</label>
       <input id="customer" placeholder="예) Hyundai MOBIS" oninput="saveMeta()">
+    </div>
+    <div class="topmeta-field">
       <label>공장</label>
       <input id="plant" placeholder="예) 창원 1공장" oninput="saveMeta()">
+    </div>
+    <div class="topmeta-field">
       <label>PFMEA No.</label>
       <input id="pfmeaNo" placeholder="예) PFMEA-2025-001" oninput="saveMeta()">
-      <label style="margin-top:10px">프로젝트 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(ASSY + 하위 자재, 여러 장 등록 가능)</span></label>
+    </div>
+    <div class="topmeta-field topmeta-rules">
+      <label>&nbsp;</label>
+      <button type="button" class="topmeta-rules-btn" id="rulesToggleBtn" onclick="toggleGlobalRules(event)">
+        <i class="ti ti-notes" style="font-size:13px"></i> 공통 분석 지침
+        <span class="rules-badge" id="rulesBadge"></span>
+        <i class="ti ti-chevron-down" style="font-size:12px"></i>
+      </button>
+      <div class="topmeta-rules-panel" id="rulesPanel">
+        <label>공통 분석 지침 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(모든 공정·도면 분석에 자동 반영)</span></label>
+        <textarea id="globalRulesInput" rows="4"
+          placeholder="예) 공정 번호 20번 이후는 모두 AUTO 인라인 설비이며 작업자 투입 없음&#10;예) 도면 우측 표제란의 개정 이력 표는 분석에서 제외"
+          oninput="projGlobalRules=this.value;idbSet('proj_global_rules',this.value).catch(()=>{});updateRulesBadge()"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-body">
+  <div class="sidebar-wrap" id="sidebarWrap">
+  <!-- ── Sidebar: 도면 ── -->
+  <div class="sidebar" id="sidebar">
+    <div class="proj-block">
+      <label>프로젝트 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(ASSY + 하위 자재, 여러 장 등록 가능)</span></label>
       <div class="part-hint-row" id="partHintRowPre" style="margin-bottom:6px">
         <label class="part-hint-label" for="partHintInputPre">이 부품이 어디에 들어가는지 알면 먼저 입력해두세요 (도면 업로드 전에도 가능)</label>
         <input type="text" id="partHintInputPre" class="part-hint-input"
@@ -665,6 +739,7 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
       </div>
     </div>
   </div>
+  </div>
 </div>
 
 <!-- ── Add Process Modal ── -->
@@ -698,7 +773,7 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
     <div class="fblock">
       <label>공정 기능 / 특성 * (상세할수록 AI 품질 향상)</label>
       <textarea id="nFunc" rows="4"
-        placeholder="예) φ8.5 드릴 가공, 깊이 12±0.1mm&#10;진위치도 ⌀0.05, 표면 Ra1.6&#10;재질: SPCC t1.5, 가공온도 상온&#10;특별특성: 구멍 위치도 SC"></textarea>
+        placeholder="지정된 위치에 정해진 부품을 조립"></textarea>
     </div>
 
     <div class="fblock">
@@ -753,7 +828,7 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
     <div class="fblock">
       <label>공정 기능 / 특성 *</label>
       <textarea id="eFunc" rows="4"
-        placeholder="예) φ8.5 드릴 가공, 깊이 12±0.1mm&#10;진위치도 ⌀0.05, 표면 Ra1.6"></textarea>
+        placeholder="예)지정된 위치에 정해진 부품을 조립"></textarea>
     </div>
     <div class="fblock">
       <label>장비 타입</label>
@@ -1059,6 +1134,7 @@ let upFile = null, upData = null, upType = null;
 let projDrawings = [];
 let projAssemblyNotes = ''; // 여러 도면을 종합 분석할 때 AI가 파악한 ASSY-하위자재 조립관계 요약
 let projPartHint = ''; // 사용자가 입력한 부품 적용처/카테고리 힌트 (예: "전동트렁크")
+let projGlobalRules = ''; // 모든 공정/도면 분석에 공통 적용되는 담당자 지정 지침 (예: "OP-20 이후는 AUTO 인라인", "표제란 개정이력은 분석 제외")
 let _activeDrwId=null, _viewerDrawingId=null; // 모달/뷰어에서 현재 대상으로 삼는 도면 id
 function getDrawing(id){ return projDrawings.find(d=>d.id===id)||null; }
 function defaultDrawing(){ return projDrawings.find(d=>d.role==='assy')||projDrawings[0]||null; }
@@ -1094,6 +1170,21 @@ function syncPartHintInputs(){
   if(pre&&pre.value!==projPartHint) pre.value=projPartHint;
   if(post&&post.value!==projPartHint) post.value=projPartHint;
 }
+
+/* ─ 상단 공통 분석 지침 드롭다운 ─ */
+function toggleGlobalRules(ev){
+  if(ev) ev.stopPropagation();
+  document.getElementById('rulesPanel').classList.toggle('open');
+}
+function updateRulesBadge(){
+  const badge=document.getElementById('rulesBadge');
+  if(badge) badge.classList.toggle('on', !!(projGlobalRules&&projGlobalRules.trim()));
+}
+document.addEventListener('click',(ev)=>{
+  const panel=document.getElementById('rulesPanel');
+  if(!panel||!panel.classList.contains('open')) return;
+  if(!ev.target.closest('.topmeta-rules')) panel.classList.remove('open');
+});
 
 /* ─ Persist ─ */
 function saveAll(){
@@ -1830,10 +1921,13 @@ async function startDrawingAnalysis(){
     const hintLine = projPartHint && projPartHint.trim()
       ? `\n\n사용자 제공 정보(참고): 이 부품/어셈블리는 "${projPartHint.trim()}"에 들어갑니다. 이 정보를 partIdentification에 최우선으로 반영해 주세요.`
       : '';
+    const globalRuleLine = projGlobalRules && projGlobalRules.trim()
+      ? `\n\n담당자 지정 공통 지침 (모든 도면 분석에 반영. 특정 영역/항목을 분석에서 제외하라는 지시가 있으면 해당 부분은 dimensions/notes/translations 등 결과에 포함하지 말고 건너뛸 것): ${projGlobalRules.trim()}`
+      : '';
     const multiLine = n>1
       ? `총 ${n}장의 도면이 첨부되었습니다(순서대로 도면 1~${n}). 각 도면을 독립적으로 정확히 분석하고, drawings 배열의 순서를 첨부 순서와 반드시 일치시켜 주세요. 또한 ASSY 도면과 하위 자재 도면 간의 조립관계를 assemblyNotes에 요약해 주세요.`
       : '이 도면을 분석해 주세요.';
-    content.push({type:'text',text:`${multiLine} 주요 치수, 공차, 재질, 형상공차, 주기사항을 추출해 주세요. 도면에 영어, 독일어, 일본어로 적힌 모든 텍스트(주기사항, 표제란, 약어, 기호 설명 포함)를 빠짐없이 정확히 읽고, 반드시 한글 번역을 함께 제공해 주세요. translations 배열에 원문과 한글 번역을 모두 정리해 주세요. 치수가 L***처럼 변수로 표기되어 있으면 도면 내 사양 테이블을 찾아 실제 값을 매칭해 주세요.`+hintLine});
+    content.push({type:'text',text:`${multiLine} 주요 치수, 공차, 재질, 형상공차, 주기사항을 추출해 주세요. 도면에 영어, 독일어, 일본어로 적힌 모든 텍스트(주기사항, 표제란, 약어, 기호 설명 포함)를 빠짐없이 정확히 읽고, 반드시 한글 번역을 함께 제공해 주세요. translations 배열에 원문과 한글 번역을 모두 정리해 주세요. 치수가 L***처럼 변수로 표기되어 있으면 도면 내 사양 테이블을 찾아 실제 값을 매칭해 주세요.`+hintLine+globalRuleLine});
     const res=await fetch(API_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -2577,6 +2671,8 @@ function extractPartialJson(str){
 
 function buildPrompt(p){
   const equipLabel=p.equipType==='manual'?'Manual(수동) 공정 — 작업자 개입, 육안검사, 인적오류 중심으로 분석':'AUTO(자동설비) 공정 — 설비 파라미터, 센서, 자동검출, PLC 에러 중심으로 분석';
+  const globalRuleLine=projGlobalRules&&projGlobalRules.trim()?`\n\n참고 — 프로젝트 전체 공정에 공통 적용되는 담당자 지정 지침 (아래 지침이 특정 공정번호 이후/이전, 특정 조건에만 적용된다는 내용을 포함하면, 반드시 이 공정의 공정번호(${p.num||'N/A'})·공정명(${p.name})이 그 조건에 해당하는지 스스로 판단한 뒤 해당될 때만 반영하고, 해당하지 않으면 무시할 것):
+${projGlobalRules.trim()}`:'';
   const kwLine=p.keywords?`\n\n참고 — 담당자가 직접 지정한 핵심 키워드/관리포인트: ${p.keywords}
 이 키워드들은 현장 담당자가 실무 경험을 바탕으로 강조한 것이므로, 각 키워드가 실제로 의미하는 구체적인 체크포인트·업계 표준 관리방법을 당신의 전문 지식을 활용해 적극 반영하세요. 키워드를 단순히 언급만 하지 말고, 그로부터 도출되는 실제 고장모드·원인·현행관리를 구체적으로 작성하세요. 예를 들어 키워드가 "부품수령"이면 부품 식별 라벨/자재 표시 확인, 수량 대조, 외관 손상 확인, 보관기한(유효기간) 확인 등 수령 검사의 실무 체크포인트를, "이물혼입"이면 이물 유입 경로 차단, 작업장 청결도 관리, 금속검출기 통과 등을 해당 공정에 맞게 구체적으로 반영하세요.`:'';
   const pastLine=p.pastIssues?`\n\n참고 — 과거 유사 차종/프로젝트에서 실제 발생했던 문제점 (담당자 입력, 반드시 반영):
@@ -2651,7 +2747,7 @@ CP 작성 규칙(중요):
 - 공정번호: ${p.num||'N/A'}
 - 공정명: ${p.name}
 - 공정 기능/특성: ${p.func}
-- 장비 타입: ${equipLabel}${kwLine}${pastLine}${partLine}${assyLine}${materialLine}${dimLine}
+- 장비 타입: ${equipLabel}${globalRuleLine}${kwLine}${pastLine}${partLine}${assyLine}${materialLine}${dimLine}
 ${drws.length?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악하여 ':''}
 이 공정에 대한 PFMEA와 Control Plan을 AIAG-VDA 5th Edition 기준으로 작성해주세요.
 실제 자동차 부품 양산 현장에서 발생 가능한 구체적인 내용으로 전문적으로 작성하세요.`;
@@ -2982,9 +3078,12 @@ function resetProject(){
   if(!confirm('모든 공정 데이터와 프로젝트 정보를 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
   procs=[];
   cur=-1;
-  ['partNum','partName','customer','plant','pfmeaNo'].forEach(k=>{
+  ['partNum','partName','customer','plant','pfmeaNo','globalRulesInput'].forEach(k=>{
     document.getElementById(k).value='';
   });
+  projGlobalRules='';
+  idbDel('proj_global_rules').catch(()=>{});
+  updateRulesBadge();
   clearAllDrawings();
   localStorage.removeItem('pfmea_state');
   renderList();
@@ -3023,6 +3122,12 @@ function initApp(){
     return idbGet('proj_part_hint');
   }).then(hint=>{
     if(hint) projPartHint=hint;
+    return idbGet('proj_global_rules');
+  }).then(rules=>{
+    if(rules) projGlobalRules=rules;
+    const rulesEl=document.getElementById('globalRulesInput');
+    if(rulesEl) rulesEl.value=projGlobalRules;
+    updateRulesBadge();
     renderDrawingList();
     syncPartHintInputs(); // 도면 유무와 관계없이 입력창에 저장된 힌트 복원
   }).catch(()=>{});
