@@ -2501,46 +2501,43 @@ Control Plan 작성 규칙 — 공정흐름도/자동검사/관리분담:
 - respProd(생산): 이 관리방법을 현장 생산 작업자/설비가 직접 수행/운영하면 '○' (대부분의 공정관리 항목에 해당)
 - respQC(품질/QC): 품질 부서의 정기 검사·판정·기록 관리가 필요하면 '○' (SC/CC 특성, 검사공정, 샘플링 검사 등은 원칙적으로 '○')
 - respMat(자재): 원자재/구매품 입고검사, 수입검사, 자재 성적서 확인 등 자재 부서 담당 항목에만 '○', 그 외에는 빈 문자열
-- note: 특기사항(예: 고객 지정 검사주기, 법규 요구사항, 협력사 관리 특이사항 등)이 있을 때만 작성, 없으면 빈 문자열`;
+- note: 특기사항(예: 고객 지정 검사주기, 법규 요구사항, 협력사 관리 특이사항 등)이 있을 때만 작성, 없으면 빈 문자열
+
+응답 길이 관리(중요): pfmea와 cp 배열을 모두 완성하는 것이 각 필드를 장황하게 쓰는 것보다 우선이다. 고장모드가 많거나 설명이 길어져 응답이 끊길 위험이 있으면, action/react 등 서술형 필드를 간결하게 줄여서라도 pfmea 최소 개수와 cp 배열을 반드시 끝까지(JSON 마지막 '}'까지) 포함시켜라. pfmea만 길게 쓰고 cp 배열을 아예 빠뜨리는 것은 절대 금지 — cp가 비면 Control Plan 결과물 자체가 만들어지지 않는다.`;
 
 /* ─ JSON repair utilities ─ */
 function repairJson(str){
   // 잘린 JSON 자동 복구: 열린 괄호/문자열 닫기
   let s = str;
 
-  // 마지막 완성된 객체까지만 남기기
-  // pfmea 배열과 cp 배열이 모두 있으면 그냥 시도
-  // 잘린 경우 열린 구조를 닫아줌
+  // 잘린 위치에서 괄호가 열려 있는지(stack) / 문자열 도중인지(inStr) 추적
   const stack = [];
   let inStr = false, escaped = false;
-  let lastGoodPos = 0;
 
   for(let i=0; i<s.length; i++){
     const ch = s[i];
     if(escaped){ escaped=false; continue; }
     if(ch==='\\'){ escaped=true; continue; }
-    if(ch==='"'){
-      inStr=!inStr;
-      if(!inStr) lastGoodPos=i;
-      continue;
-    }
+    if(ch==='"'){ inStr=!inStr; continue; }
     if(inStr) continue;
     if(ch==='{'||ch==='[') stack.push(ch);
-    else if(ch==='}'||ch===']'){
-      stack.pop();
-      if(stack.length===0) lastGoodPos=i;
-    }
+    else if(ch==='}'||ch===']') stack.pop();
   }
 
   // 잘렸으면 복구 시도
-  if(stack.length>0){
-    // 마지막 완전한 객체 뒤까지 자름
-    // 열린 배열/객체 닫기
+  if(stack.length>0 || inStr){
     let fixed = s;
-    // 마지막 쉼표 뒤 불완전 객체 제거
-    fixed = fixed.replace(/,\s*\{[^}]*$/, '');
-    fixed = fixed.replace(/,\s*"[^"]*$/, '');
-    fixed = fixed.replace(/"[^"]*$/, '"...(잘림)"');
+    if(inStr){
+      // 문자열 값 도중에 잘린 경우에만 마지막 문자열을 강제로 닫는다
+      // (문자열 밖에서 이 처리를 하면 이미 닫힌 "값"} 같은 구조의 마지막 따옴표를
+      //  "열린 문자열의 시작"으로 잘못 인식해 멀쩡한 JSON을 깨뜨릴 수 있음)
+      fixed = fixed.replace(/"[^"]*$/, '"...(잘림)"');
+    } else {
+      // 문자열 밖(쉼표 뒤 불완전한 객체/키)에서 잘린 경우 그 조각만 제거
+      fixed = fixed.replace(/,\s*\{[^}]*$/, '');
+      fixed = fixed.replace(/,\s*"[^"]*$/, '');
+      fixed = fixed.replace(/,\s*$/, '');
+    }
     // 닫기
     const closing = [...stack].reverse().map(c=>c==='{'?'}':']').join('');
     fixed = fixed + closing;
@@ -2645,7 +2642,7 @@ ${drws.length?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악�
 async function analyze(idx){
   const p=procs[idx];
   const steps=['잠재 고장모드 도출 중...','고장 영향 및 심각도(S) 평가 중...','잠재 원인 및 발생도(O) 분석 중...','현행 관리방법 및 검출도(D) 평가 중...','권장 조치사항 도출 중...','Control Plan 항목 생성 중...'];
-  const ESTIMATED_TOKENS=3500; // 진행률 계산용 예상 출력 토큰 (실측 아님, 체감용 추정치)
+  const ESTIMATED_TOKENS=6000; // 진행률 계산용 예상 출력 토큰 (실측 아님, 체감용 추정치)
 
   const setPct=(pct)=>{
     procs[idx].progressPct=pct;
@@ -2693,7 +2690,7 @@ async function analyze(idx){
       },
       body:JSON.stringify({
         model:'claude-sonnet-4-5',
-        max_tokens:8000,
+        max_tokens:16000,
         system:SYSTEM_PROMPT,
         messages:[{role:'user',content}],
         stream:true
@@ -2707,7 +2704,7 @@ async function analyze(idx){
     // ─ SSE 스트림 직접 파싱하여 누적 텍스트 길이로 진행률(%) 추정 ─
     const reader=res.body.getReader();
     const decoder=new TextDecoder();
-    let buf='', text='';
+    let buf='', text='', wasTruncated=false;
     while(true){
       const {done,value}=await reader.read();
       if(done) break;
@@ -2725,6 +2722,8 @@ async function analyze(idx){
           const outputTokens=Math.round(text.length/4);
           const pct=Math.min(96,Math.round((outputTokens/ESTIMATED_TOKENS)*100));
           setPct(pct);
+        }else if(evt.type==='message_delta'&&evt.delta?.stop_reason==='max_tokens'){
+          wasTruncated=true;
         }
       }
     }
@@ -2750,7 +2749,11 @@ async function analyze(idx){
     procs[idx].status='done';
     procs[idx].fileData=null;
     renderList(); renderContent(); saveAll();
-    toast(`${p.name} 분석 완료 — ${procs[idx].pfmea.length}개 고장모드`,'ok');
+    if(wasTruncated || !procs[idx].cp.length){
+      toast(`${p.name} 분석 완료 — 응답이 길어 Control Plan이 비어있거나 일부만 생성되었을 수 있습니다. 필요하면 AI 재분석을 눌러주세요`,'err');
+    }else{
+      toast(`${p.name} 분석 완료 — ${procs[idx].pfmea.length}개 고장모드`,'ok');
+    }
   }catch(e){
     procs[idx].status='error';
     procs[idx].errMsg=e.message;
