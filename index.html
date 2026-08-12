@@ -32,7 +32,6 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 
 /* ── Layout ─────────────────────────────────────────── */
 .app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
-.app-body{display:flex;flex:1;min-height:0;overflow:hidden}
 
 /* ── Top meta bar: project info, laid out horizontally to save vertical space ── */
 .topmeta{
@@ -61,7 +60,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 #partName{width:170px}
 #customer{width:110px}
 #plant{width:110px}
-#pfmeaNo{width:150px}
+#pfmeaNo{width:230px}
 .topmeta-rules{position:relative}
 .topmeta-rules-btn{
   display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);
@@ -85,74 +84,83 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 }
 .topmeta-rules-panel textarea:focus{border-color:var(--accent)}
 
-/* ── Sidebar (drawings only) ─────────────────────────── */
-.sidebar-wrap{
-  display:flex;flex-shrink:0;transition:transform .25s;
-  box-shadow:2px 0 16px rgba(61,99,245,.07);
+/* ── Drawing strip: horizontal row (side panel + scrolling cards + action) ── */
+.drwstrip{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:10px 18px;background:var(--bg2);border-bottom:1px solid var(--border);
+  flex-shrink:0;overflow-x:auto;overflow-y:hidden;
 }
-.sidebar{
-  width:270px;background:var(--bg2);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;flex-shrink:0;
-  overflow-y:auto;
+.drwstrip::-webkit-scrollbar{height:5px}
+.drwstrip::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.drwstrip-side{
+  display:flex;flex-direction:column;gap:6px;flex-shrink:0;width:200px;
+  position:sticky;left:0;background:var(--bg2);z-index:2;
 }
-.sidebar::-webkit-scrollbar{width:4px}
-.sidebar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-.proj-block{padding:10px 14px;border-bottom:1px solid var(--border)}
-.proj-block label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;margin-top:10px}
-.proj-block label:first-child{margin-top:0}
-.proj-block input,.proj-block textarea{
-  width:100%;background:var(--bg3);border:1px solid var(--border);
-  border-radius:var(--r);padding:7px 9px;color:var(--text1);
-  font-size:13px;font-weight:500;outline:none;transition:border-color .15s;
-  font-family:inherit
+.drwstrip-side label{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--text3);font-weight:600;display:block}
+.drwstrip-side .part-hint-input{width:100%}
+.drwstrip-upload{padding:9px 8px}
+.drwstrip-upload i{font-size:18px;margin-bottom:3px}
+.drwstrip-upload p{font-size:10.5px}
+.drwstrip-cards{display:flex;gap:8px;flex-shrink:0}
+.drwstrip-empty{
+  font-size:11px;color:var(--text3);display:flex;align-items:center;
+  padding:0 6px;white-space:nowrap;flex-shrink:0;align-self:center;
 }
-.proj-block input:focus,.proj-block textarea:focus{border-color:var(--accent)}
+.drwstrip-actions{display:flex;align-items:center;flex-shrink:0;padding-left:2px}
+.pdf-thumb{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);padding:8px 10px;text-align:left;
+  width:168px;flex-shrink:0;
+}
+.pdf-thumb img{max-width:100%;max-height:90px;object-fit:contain;border-radius:4px}
+.pdf-thumb .fname{font-size:11px;color:var(--text3);margin-top:6px}
 
-/* ── Process list column (separate from project/drawings sidebar) ── */
+/* ── Process list strip: horizontal row ── */
 .proc-col{
-  width:220px;background:var(--bg2);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;flex-shrink:0;
+  display:flex;align-items:center;gap:12px;
+  padding:8px 18px;background:var(--bg2);border-bottom:1px solid var(--border);
+  flex-shrink:0;
 }
 .proc-col-head{
-  padding:14px 14px 10px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
 }
 .proc-col-head h2{
   font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;
-  letter-spacing:.6px;display:flex;align-items:center;gap:6px;
+  letter-spacing:.6px;display:flex;align-items:center;gap:6px;white-space:nowrap;
 }
 .proc-count-badge{
   font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;
   background:var(--bg4);color:var(--accent2);border:1px solid var(--border2);
 }
-.proc-list{flex:1;overflow-y:auto;padding:6px}
-.proc-list::-webkit-scrollbar{width:3px}
-.proc-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.proc-list{flex:1;display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;padding:2px;min-width:0}
+.proc-list::-webkit-scrollbar{height:5px}
+.proc-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .proc-item{
   padding:9px 10px;border-radius:var(--r);cursor:pointer;
-  margin-bottom:2px;border:1px solid transparent;transition:.15s
+  border:1px solid transparent;transition:.15s;
+  width:180px;flex-shrink:0;
 }
 .proc-item:hover{background:var(--bg3)}
 .proc-item.active{background:var(--bg4);border-color:var(--border2)}
 .proc-item .pn{font-size:10px;color:var(--text3)}
-.proc-item .pname{font-size:12px;font-weight:500;color:var(--text1);margin-top:2px}
+.proc-item .pname{font-size:12px;font-weight:500;color:var(--text1);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .proc-item .pstatus{display:flex;align-items:center;gap:5px;margin-top:4px}
 .sdot{width:6px;height:6px;border-radius:50%;background:var(--text3);flex-shrink:0}
 .sdot.done{background:var(--success)}
 .sdot.analyzing{background:var(--warn);animation:pulse 1s infinite}
 .sdot.error{background:var(--danger)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.stext{font-size:10px;color:var(--text3)}
+.stext{font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ai-pill{
   font-size:9px;padding:1px 5px;border-radius:3px;
   background:rgba(79,124,255,.1);color:var(--accent2);
   border:1px solid rgba(79,124,255,.2);
 }
 .add-btn{
-  margin:6px;padding:8px;border:1px dashed var(--border2);
+  padding:7px 10px;border:1px dashed var(--border2);
   border-radius:var(--r);background:transparent;color:var(--text2);
   cursor:pointer;font-size:12px;display:flex;align-items:center;
-  justify-content:center;gap:6px;transition:.15s;
+  justify-content:center;gap:6px;transition:.15s;flex-shrink:0;white-space:nowrap;
 }
 .add-btn:hover{background:var(--bg3);border-color:var(--accent);color:var(--accent)}
 
@@ -483,11 +491,6 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
 .part-id-line{font-size:12.5px;color:var(--text1);line-height:1.65;margin-bottom:3px}
 .part-id-line b{color:var(--text1);font-weight:700;margin-right:4px}
 .analyze-btn-row{display:flex;gap:6px;margin-top:6px}
-.part-hint-row{margin-bottom:0;display:flex;flex-direction:column;gap:4px}
-.part-hint-label{
-  font-size:10px;color:var(--text3);line-height:1.4;
-  white-space:normal;word-break:keep-all
-}
 .part-hint-input{
   width:100%;font-size:11px;padding:6px 9px;border-radius:var(--r);
   border:1px solid var(--border2);background:var(--bg1);color:var(--text1);
@@ -590,22 +593,15 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
 
 /* ── Responsive ──────────────────────────────────────── */
 @media(max-width:768px){
-  .sidebar-wrap{
-    position:fixed;left:0;top:0;height:100%;z-index:100;transform:translateX(-100%);
-    flex-direction:column;width:86vw;max-width:340px;overflow-y:auto;
-  }
-  .sidebar-wrap.open{transform:none}
-  .sidebar,.proc-col{width:100%;flex-shrink:0}
-  .proc-col{border-right:none;border-top:1px solid var(--border)}
-  .menu-btn{display:flex!important}
   .row2{grid-template-columns:1fr}
   .topmeta{gap:8px;padding:8px 12px}
   .topmeta-field{flex:1 1 130px}
   .topmeta-field input{width:100%}
   #partNum,#partName,#customer,#plant,#pfmeaNo{width:auto}
   .topmeta-rules-panel{right:auto;left:0}
+  .drwstrip-side{width:150px}
+  .proc-col-head h2 span,.proc-col-head h2{font-size:10px}
 }
-.menu-btn{display:none;background:none;border:none;color:var(--text1);cursor:pointer;font-size:20px;margin-right:4px}
 </style>
 </head>
 <body>
@@ -660,49 +656,42 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
     </div>
   </div>
 
-  <div class="app-body">
-  <div class="sidebar-wrap" id="sidebarWrap">
-  <!-- ── Sidebar: 도면 ── -->
-  <div class="sidebar" id="sidebar">
-    <div class="proj-block">
-      <label>프로젝트 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(ASSY + 하위 자재, 여러 장 등록 가능)</span></label>
-      <div class="part-hint-row" id="partHintRowPre" style="margin-bottom:6px">
-        <label class="part-hint-label" for="partHintInputPre">이 부품이 어디에 들어가는지 알면 먼저 입력해두세요 (도면 업로드 전에도 가능)</label>
-        <input type="text" id="partHintInputPre" class="part-hint-input"
-          placeholder="예: 전동트렁크, 도어 힌지"
-          value="${esc(projPartHint||'')}"
-          oninput="projPartHint=this.value;idbSet('proj_part_hint',this.value).catch(()=>{});syncPartHintInputs()"
-          title="AI 도면/공정 분석 시 참고 정보로 함께 활용됩니다">
-      </div>
-      <div id="projUploadZone" class="upload-zone" style="padding:14px 10px;margin-top:4px"
+  <!-- ── 도면 스트립: 좌측 업로드/힌트 + 가로 스크롤 카드 + 재분석 버튼 ── -->
+  <div class="drwstrip" id="drwStrip">
+    <div class="drwstrip-side">
+      <label>프로젝트 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(ASSY + 하위 자재, 여러 장)</span></label>
+      <input type="text" id="partHintInput" class="part-hint-input"
+        placeholder="이 부품/어셈블리 적용처 (예: 전동트렁크)"
+        value="${esc(projPartHint||'')}"
+        oninput="projPartHint=this.value;idbSet('proj_part_hint',this.value).catch(()=>{})"
+        title="AI 도면/공정 분석 시 참고 정보로 함께 활용됩니다">
+      <div id="projUploadZone" class="upload-zone drwstrip-upload"
            onclick="document.getElementById('projFileIn').click()"
            ondrop="onProjDrop(event)" ondragover="onProjOver(event)" ondragleave="onProjLeave(event)">
-        <i class="ti ti-file-upload" aria-hidden="true" style="font-size:20px;display:block;margin-bottom:4px"></i>
-        <p id="projUploadLabel" style="font-size:11px">PDF / 이미지 업로드</p>
+        <i class="ti ti-file-upload" aria-hidden="true"></i>
+        <p id="projUploadLabel">PDF / 이미지 업로드</p>
       </div>
-      <div id="projThumb" style="display:none;margin-top:6px"></div>
       <input type="file" id="projFileIn" accept=".pdf,image/*" multiple style="display:none" onchange="onProjFileSel(event)">
     </div>
+    <div class="drwstrip-cards" id="projThumb"></div>
+    <div class="drwstrip-actions" id="drwAnalyzeRow" style="display:none"></div>
   </div>
 
-  <!-- ── Process list column ── -->
+  <!-- ── 공정목록 스트립: 좌측 헤더/추가 버튼 + 가로 스크롤 카드 ── -->
   <div class="proc-col" id="procCol">
     <div class="proc-col-head">
       <h2><i class="ti ti-list-check" style="font-size:13px"></i> 공정 목록</h2>
       <span class="proc-count-badge" id="procCountBadge">0</span>
     </div>
     <div class="proc-list" id="procList"></div>
-
     <button class="add-btn" onclick="openAdd()">
       <i class="ti ti-plus" style="font-size:14px"></i> 공정 추가
     </button>
-  </div>
   </div>
 
   <!-- ── Main ── -->
   <div class="main">
     <div class="topbar">
-      <button class="menu-btn" onclick="toggleSidebar()"><i class="ti ti-menu-2"></i></button>
       <span class="topbar-title" id="topTitle">공정을 선택하거나 추가하세요</span>
       <div class="tab-grp">
         <button class="tabx on" id="t-pfmea" onclick="switchTab('pfmea')">PFMEA</button>
@@ -734,11 +723,10 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
       <div class="empty" id="welcomeMsg">
         <i class="ti ti-brain" style="color:var(--accent)"></i>
         <h3>AI 기반 PFMEA / Control Plan</h3>
-        <p>왼쪽 패널에서 공정을 추가하고<br>도면을 업로드하면 AI가 자동 분석합니다<br><br>
+        <p>위 패널에서 공정을 추가하고<br>도면을 업로드하면 AI가 자동 분석합니다<br><br>
         <span style="font-size:11px;color:var(--text3)">AIAG-VDA 5th Edition 기준 · IATF 16949</span></p>
       </div>
     </div>
-  </div>
   </div>
 </div>
 
@@ -1163,14 +1151,6 @@ function drawingCheckboxesHtml(prefix,selectedIds){
     </label>`;
   }).join('');
 }
-function syncPartHintInputs(){
-  // 업로드 전(partHintInputPre)과 업로드 후 썸네일(partHintInput) 두 입력창의 값을 서로 동기화
-  const pre=document.getElementById('partHintInputPre');
-  const post=document.getElementById('partHintInput');
-  if(pre&&pre.value!==projPartHint) pre.value=projPartHint;
-  if(post&&post.value!==projPartHint) post.value=projPartHint;
-}
-
 /* ─ 상단 공통 분석 지침 드롭다운 ─ */
 function toggleGlobalRules(ev){
   if(ev) ev.stopPropagation();
@@ -1306,11 +1286,6 @@ function toast(msg, type=''){
   t._t=setTimeout(()=>t.className='toast',2600);
 }
 
-/* ─ Sidebar toggle (mobile) ─ */
-function toggleSidebar(){
-  document.getElementById('sidebarWrap').classList.toggle('open');
-}
-
 /* ─ Process list ─ */
 function renderList(){
   const el=document.getElementById('procList');
@@ -1344,8 +1319,6 @@ function selProc(i){
   pfmeaSelected.clear();
   renderList();
   renderContent();
-  // mobile: close sidebar
-  document.getElementById('sidebarWrap').classList.remove('open');
 }
 
 function deleteProc(i){
@@ -2358,27 +2331,22 @@ function removeProjDrawing(id){
 }
 
 function renderDrawingList(){
-  const zone=document.getElementById('projUploadZone');
   const label=document.getElementById('projUploadLabel');
   const thumb=document.getElementById('projThumb');
-  const preHintRow=document.getElementById('partHintRowPre');
+  const actions=document.getElementById('drwAnalyzeRow');
+  if(label) label.textContent=projDrawings.length?'+ 도면 추가':'PDF / 이미지 업로드';
+
   if(!projDrawings.length){
-    zone.style.display='block';
-    if(label) label.textContent='PDF / 이미지 업로드';
-    thumb.style.display='none';
-    thumb.innerHTML='';
-    if(preHintRow) preHintRow.style.display='block';
+    thumb.innerHTML='<div class="drwstrip-empty">등록된 도면이 없습니다</div>';
+    actions.style.display='none';
+    actions.innerHTML='';
     updateModalDrawingStatus();
     return;
   }
-  zone.style.display='block';
-  if(label) label.textContent='+ 도면 추가 (ASSY 또는 하위 자재)';
-  thumb.style.display='block';
-  if(preHintRow) preHintRow.style.display='none'; // 업로드 후에는 썸네일 쪽 입력창만 표시
 
   const cards=projDrawings.map(d=>{
     const isImg=d.type&&d.type.startsWith('image/');
-    return `<div class="pdf-thumb" style="padding:8px 10px;margin-bottom:6px;text-align:left">
+    return `<div class="pdf-thumb">
       <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
         <select onchange="setDrawingRole('${d.id}',this.value)" style="font-size:9.5px;padding:2px 3px;border-radius:4px;border:1px solid var(--border);background:var(--bg3);color:var(--text2)">
           <option value="assy"${d.role==='assy'?' selected':''}>ASSY</option>
@@ -2400,23 +2368,14 @@ function renderDrawingList(){
       </div>
     </div>`;
   }).join('');
+  thumb.innerHTML=cards;
 
   const anyInfo=projDrawings.some(d=>d.info);
-  thumb.innerHTML=`
-    <div class="part-hint-row" id="partHintRow" style="margin-bottom:8px">
-      <label class="part-hint-label" for="partHintInput">이 부품/어셈블리가 어디에 들어가는지 알면 입력</label>
-      <input type="text" id="partHintInput" class="part-hint-input"
-        placeholder="예: 전동트렁크, 도어 힌지"
-        value="${esc(projPartHint||'')}"
-        oninput="projPartHint=this.value;idbSet('proj_part_hint',this.value).catch(()=>{});syncPartHintInputs()"
-        title="AI 도면/공정 분석 시 참고 정보로 함께 활용됩니다">
-    </div>
-    ${cards}
-    <div class="analyze-btn-row" id="drwAnalyzeRow">
-      <button class="btn primary" style="flex:1;font-size:11px;padding:6px 8px" onclick="startDrawingAnalysis()">
-        <i class="ti ti-brain" style="font-size:12px"></i> ${anyInfo?'전체 재분석':`AI 분석 시작 (${projDrawings.length}개 도면 종합)`}
-      </button>
-    </div>`;
+  actions.style.display='flex';
+  actions.innerHTML=`
+    <button class="btn primary" style="font-size:11px;padding:6px 10px;white-space:nowrap" onclick="startDrawingAnalysis()">
+      <i class="ti ti-brain" style="font-size:12px"></i> ${anyInfo?'전체 재분석':`AI 분석 시작 (${projDrawings.length}개)`}
+    </button>`;
   updateModalDrawingStatus();
 }
 
@@ -2431,7 +2390,8 @@ function clearAllDrawings(){
   idbDel('proj_drawing').catch(()=>{});
   idbDel('proj_drawing_info').catch(()=>{});
   document.getElementById('projFileIn').value='';
-  syncPartHintInputs();
+  const hintEl=document.getElementById('partHintInput');
+  if(hintEl) hintEl.value='';
   renderDrawingList();
 }
 function updateModalDrawingStatus(){
@@ -3129,7 +3089,8 @@ function initApp(){
     if(rulesEl) rulesEl.value=projGlobalRules;
     updateRulesBadge();
     renderDrawingList();
-    syncPartHintInputs(); // 도면 유무와 관계없이 입력창에 저장된 힌트 복원
+    const hintEl=document.getElementById('partHintInput');
+    if(hintEl) hintEl.value=projPartHint;
   }).catch(()=>{});
 }
 checkAuth();
