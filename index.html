@@ -1266,6 +1266,7 @@ function renderPFMEA(p,c){
         <col style="width:52px">   <!-- O -->
         <col style="width:160px">  <!-- 예방 -->
         <col style="width:160px">  <!-- 검출 -->
+        <col style="width:140px">  <!-- 검출방법 -->
         <col style="width:52px">   <!-- D -->
         <col style="width:64px">   <!-- RPN -->
         <col style="width:220px">  <!-- 권장조치 -->
@@ -1280,6 +1281,7 @@ function renderPFMEA(p,c){
           <th rowspan="2">잠재 원인</th>
           <th rowspan="2" style="text-align:center">O</th>
           <th colspan="2" style="text-align:center">현 공정관리(P/D)</th>
+          <th rowspan="2">검출 방법</th>
           <th rowspan="2" style="text-align:center">D</th>
           <th rowspan="2" style="text-align:center">RPN</th>
           <th rowspan="2">권장 조치사항</th>
@@ -1304,6 +1306,7 @@ function renderPFMEA(p,c){
           <td class="num-cell" style="font-weight:700;font-size:14px;color:${oColor}">${r.o||'-'}</td>
           <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'ctrlP',this)">${esc(r.ctrlP||(r.ctrl||''))}</td>
           <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'ctrlD',this)">${esc(r.ctrlD||'')}</td>
+          <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'detectMethod',this)">${esc(r.detectMethod||'')}</td>
           <td class="num-cell" style="font-weight:700;font-size:14px;color:${dColor}">${r.d||''}</td>
           <td class="num-cell"><span class="rpn ${rpnClass(rv)}" style="font-size:14px;font-weight:700">${rv}</span></td>
           <td contenteditable="true" onblur="sc(${cur},'pfmea',${ri},'action',this)">${esc(r.action)}</td>
@@ -1405,7 +1408,7 @@ function rpn(r){ return (r.s||0)*(r.o||0)*(r.d||0); }
 function delRow(type,ri){ procs[cur][type].splice(ri,1); renderContent(); saveAll(); }
 function delCpRow(ri){ procs[cur].cp.splice(ri,1); renderContent(); saveAll(); }
 function addRow(){
-  procs[cur].pfmea.push({fm:'',effect:'',s:5,cause:'',o:3,ctrlP:'',ctrlD:'검사',d:4,action:''});
+  procs[cur].pfmea.push({fm:'',effect:'',s:5,cause:'',o:3,ctrlP:'',ctrlD:'검사',detectMethod:'',d:4,action:''});
   renderContent(); saveAll();
 }
 function addCpRow(){
@@ -2099,6 +2102,7 @@ const SYSTEM_PROMPT=`당신은 AIAG-VDA PFMEA 5th Edition 및 IATF 16949 Control
       "o": 발생도(1-10 정수),
       "ctrlP": "예방 관리방법 (공정파라미터·Poka-Yoke·작업표준·설비점검 등)",
       "ctrlD": "검출 관리방법 (검사·계측기·SPC·비전검사·육안검사 등)",
+      "detectMethod": "검출 방법 (실제 사용 검출설비/게이지명: 예- 비전검사기, 정압토크렌치, 한계게이지, 육안검사 등 구체적 수단)",
       "d": 검출도(1-10 정수),
       "action": "권장 조치사항"
     }
@@ -2432,7 +2436,7 @@ function exportExcel(){
       d[7]=row.o||'';           // 발생도
       d[8]=row.ctrlP||(row.ctrl||'');  // 예방 관리방법 (I열)
       d[9]=row.ctrlD||'';              // 검출 관리방법 (J열)
-      d[10]='';                        // 검출 방법 (공란)
+      d[10]=row.detectMethod||'';      // 검출 방법
       d[11]=row.d||'';          // 검출도
       d[12]=rpn(row);           // RPN
       d[13]=row.action||'';     // 권고 조치사항 (N:O)
@@ -2475,6 +2479,14 @@ function exportExcel(){
       dataStart++;
     });
   });
+  // 공정의 기능(A열) — 이름이 동일한 연속 행을 세로 병합
+  for(let runStart=10; runStart<dataStart;){
+    const name=A[runStart][0];
+    let runEnd=runStart+1;
+    while(runEnd<dataStart && A[runEnd][0]===name) runEnd++;
+    if(name && runEnd-runStart>1) ws['!merges'].push({s:{r:runStart,c:0},e:{r:runEnd-1,c:0}});
+    runStart=runEnd;
+  }
 
   ws['!cols']=[10.6,15.7,23.1,4.5,6,9,7,4.5,8,7,9,4.5,6,9,7,8.7,12,4,4,4,8].map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb,ws,'갑지');
@@ -2546,6 +2558,16 @@ function exportExcel(){
       ws2['!merges'].push({s:{r:cpStart,c:24},e:{r:cpStart,c:25}}); // 비고
       cpStart++;
     });
+  });
+  // 공정 번호(A열)·공정명(E열) — 이름이 동일한 연속 행을 세로 병합
+  [0,4].forEach(col=>{
+    for(let runStart=2; runStart<cpStart;){
+      const val=C[runStart][col];
+      let runEnd=runStart+1;
+      while(runEnd<cpStart && C[runEnd][col]===val) runEnd++;
+      if(val && runEnd-runStart>1) ws2['!merges'].push({s:{r:runStart,c:col},e:{r:runEnd-1,c:col}});
+      runStart=runEnd;
+    }
   });
   ws2['!cols']=[7.7,5.1,5,5,13.3,13.2,3.3,9.2,9.2,4.1,4,5,24.2,11.8,9.4,10.1,5,4.3,4.3,4.3,4.8,4.8,4.8,4.8,4.1,4.1].map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb,ws2,'을지(CP)');
