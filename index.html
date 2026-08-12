@@ -34,11 +34,17 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 .app{display:flex;height:100vh;overflow:hidden}
 
 /* ── Sidebar ─────────────────────────────────────────── */
-.sidebar{
-  width:260px;background:var(--bg2);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;flex-shrink:0;transition:transform .25s;
+.sidebar-wrap{
+  display:flex;flex-shrink:0;transition:transform .25s;
   box-shadow:2px 0 16px rgba(61,99,245,.07);
 }
+.sidebar{
+  width:270px;background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;flex-shrink:0;
+  overflow-y:auto;
+}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 .sidebar-header{padding:16px;border-bottom:1px solid var(--border)}
 .logo-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .logo-icon{
@@ -58,6 +64,24 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
   font-size:13px;font-weight:500;outline:none;transition:border-color .15s
 }
 .proj-block input:focus{border-color:var(--accent)}
+
+/* ── Process list column (separate from project/drawings sidebar) ── */
+.proc-col{
+  width:220px;background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;flex-shrink:0;
+}
+.proc-col-head{
+  padding:14px 14px 10px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.proc-col-head h2{
+  font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;
+  letter-spacing:.6px;display:flex;align-items:center;gap:6px;
+}
+.proc-count-badge{
+  font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;
+  background:var(--bg4);color:var(--accent2);border:1px solid var(--border2);
+}
 .proc-list{flex:1;overflow-y:auto;padding:6px}
 .proc-list::-webkit-scrollbar{width:3px}
 .proc-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
@@ -343,6 +367,18 @@ td[contenteditable="true"]:focus{
 }
 .kw-tag:hover{background:rgba(61,99,245,.15);border-color:var(--accent);color:var(--accent)}
 
+.drawing-check-list{
+  display:flex;flex-direction:column;gap:2px;max-height:170px;overflow-y:auto;
+  border:1px solid var(--border);border-radius:var(--r);padding:6px;background:var(--bg3)
+}
+.drawing-check-item{
+  display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;
+  cursor:pointer;font-size:12px;color:var(--text1);transition:.12s
+}
+.drawing-check-item:hover{background:var(--bg4)}
+.drawing-check-item input{accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+.dchk-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+
 
 /* ── Drawing Analysis ────────────────────────────────────── */
 .drw-panel{display:flex;flex-direction:column;gap:14px}
@@ -510,8 +546,13 @@ td[contenteditable="true"]:focus{
 
 /* ── Responsive ──────────────────────────────────────── */
 @media(max-width:768px){
-  .sidebar{position:fixed;left:0;top:0;height:100%;z-index:100;transform:translateX(-100%)}
-  .sidebar.open{transform:none}
+  .sidebar-wrap{
+    position:fixed;left:0;top:0;height:100%;z-index:100;transform:translateX(-100%);
+    flex-direction:column;width:86vw;max-width:340px;overflow-y:auto;
+  }
+  .sidebar-wrap.open{transform:none}
+  .sidebar,.proc-col{width:100%;flex-shrink:0}
+  .proc-col{border-right:none;border-top:1px solid var(--border)}
   .menu-btn{display:flex!important}
   .row2{grid-template-columns:1fr}
 }
@@ -525,7 +566,8 @@ td[contenteditable="true"]:focus{
 </div>
 
 <div class="app" id="appRoot" style="display:none">
-  <!-- ── Sidebar ── -->
+  <div class="sidebar-wrap" id="sidebarWrap">
+  <!-- ── Sidebar: 프로젝트 정보 + 도면 ── -->
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="logo-row">
@@ -566,12 +608,20 @@ td[contenteditable="true"]:focus{
       <div id="projThumb" style="display:none;margin-top:6px"></div>
       <input type="file" id="projFileIn" accept=".pdf,image/*" multiple style="display:none" onchange="onProjFileSel(event)">
     </div>
+  </div>
 
+  <!-- ── Process list column ── -->
+  <div class="proc-col" id="procCol">
+    <div class="proc-col-head">
+      <h2><i class="ti ti-list-check" style="font-size:13px"></i> 공정 목록</h2>
+      <span class="proc-count-badge" id="procCountBadge">0</span>
+    </div>
     <div class="proc-list" id="procList"></div>
 
     <button class="add-btn" onclick="openAdd()">
       <i class="ti ti-plus" style="font-size:14px"></i> 공정 추가
     </button>
+  </div>
   </div>
 
   <!-- ── Main ── -->
@@ -641,8 +691,8 @@ td[contenteditable="true"]:focus{
       </div>
     </div>
     <div class="fblock">
-      <label>적용 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(이 공정 분석에 사용할 도면)</span></label>
-      <select id="nDrawing" style="font-size:12px"></select>
+      <label>적용 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(1개 이상 선택 가능 · 미선택 시 ASSY 우선 자동 적용)</span></label>
+      <div id="nDrawingChecks" class="drawing-check-list"></div>
     </div>
     <div class="fblock">
       <label>공정 기능 / 특성 * (상세할수록 AI 품질 향상)</label>
@@ -717,8 +767,8 @@ td[contenteditable="true"]:focus{
              style="font-size:12px" oninput="updateKwSuggest('edit')">
     </div>
     <div class="fblock">
-      <label>적용 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(이 공정 분석에 사용할 도면)</span></label>
-      <select id="eDrawing" style="font-size:12px"></select>
+      <label>적용 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(1개 이상 선택 가능 · 미선택 시 ASSY 우선 자동 적용)</span></label>
+      <div id="eDrawingChecks" class="drawing-check-list"></div>
     </div>
     <div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:var(--r);padding:8px 12px;margin-bottom:4px;font-size:11px;color:var(--warn);display:flex;align-items:center;gap:7px">
       <i class="ti ti-alert-triangle" style="font-size:13px;flex-shrink:0"></i>
@@ -1000,15 +1050,30 @@ let projPartHint = ''; // 사용자가 입력한 부품 적용처/카테고리 �
 let _activeDrwId=null, _viewerDrawingId=null; // 모달/뷰어에서 현재 대상으로 삼는 도면 id
 function getDrawing(id){ return projDrawings.find(d=>d.id===id)||null; }
 function defaultDrawing(){ return projDrawings.find(d=>d.role==='assy')||projDrawings[0]||null; }
-function drawingForProc(p){ return (p&&p.drawingId&&getDrawing(p.drawingId))||defaultDrawing(); }
-function drawingSelectOptions(selectedId){
-  let html=`<option value="">자동 (ASSY 우선)</option>`;
-  html+=projDrawings.map(d=>{
+// 공정에 지정된 도면들 (1개 이상 선택 가능). 미선택이거나 지정된 도면이 모두 삭제된 경우 ASSY 우선 기본 도면으로 대체
+// p.drawingId(구버전 단일 선택 문자열)도 함께 지원해 마이그레이션 없이 호환
+function drawingsForProc(p){
+  const ids=(p&&p.drawingIds&&p.drawingIds.length)?p.drawingIds:(p&&p.drawingId?[p.drawingId]:null);
+  if(ids&&ids.length){
+    const found=ids.map(getDrawing).filter(Boolean);
+    if(found.length) return found;
+  }
+  const def=defaultDrawing();
+  return def?[def]:[];
+}
+function drawingCheckboxesHtml(prefix,selectedIds){
+  selectedIds=selectedIds||[];
+  if(!projDrawings.length) return `<p style="font-size:11px;color:var(--text3);margin:2px 0">등록된 도면이 없습니다. 왼쪽 패널에서 도면을 추가하세요.</p>`;
+  return projDrawings.map(d=>{
     const roleTxt=d.role==='assy'?'ASSY':'하위자재';
     const labelTxt=d.label?d.label:d.name;
-    return `<option value="${d.id}"${selectedId===d.id?' selected':''}>[${roleTxt}] ${esc(labelTxt)}</option>`;
+    const cid=`${prefix}Drawing_${d.id}`;
+    return `<label class="drawing-check-item" for="${cid}">
+      <input type="checkbox" id="${cid}" value="${d.id}"${selectedIds.includes(d.id)?' checked':''}>
+      <span class="badge${d.role==='assy'?' badge-ai':''}" style="font-size:9px;flex-shrink:0">${roleTxt}</span>
+      <span class="dchk-label">${esc(labelTxt)}</span>
+    </label>`;
   }).join('');
-  return html;
 }
 function syncPartHintInputs(){
   // 업로드 전(partHintInputPre)과 업로드 후 썸네일(partHintInput) 두 입력창의 값을 서로 동기화
@@ -1140,12 +1205,14 @@ function toast(msg, type=''){
 
 /* ─ Sidebar toggle (mobile) ─ */
 function toggleSidebar(){
-  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarWrap').classList.toggle('open');
 }
 
 /* ─ Process list ─ */
 function renderList(){
   const el=document.getElementById('procList');
+  const badge=document.getElementById('procCountBadge');
+  if(badge) badge.textContent=procs.length;
   if(!procs.length){
     el.innerHTML='<div style="text-align:center;padding:24px 8px"><i class="ti ti-stack-2" style="font-size:26px;color:var(--text3);display:block;margin-bottom:6px"></i><p style="font-size:11px;color:var(--text3)">공정을 추가하면<br>목록이 표시됩니다</p></div>';
     return;
@@ -1174,7 +1241,7 @@ function selProc(i){
   renderList();
   renderContent();
   // mobile: close sidebar
-  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarWrap').classList.remove('open');
 }
 
 function deleteProc(i){
@@ -1446,7 +1513,7 @@ function openEdit(i){
   document.getElementById('eName').value=p.name||'';
   document.getElementById('eFunc').value=p.func||'';
   document.getElementById('eKeywords').value=p.keywords||'';
-  document.getElementById('eDrawing').innerHTML=drawingSelectOptions(p.drawingId||'');
+  document.getElementById('eDrawingChecks').innerHTML=drawingCheckboxesHtml('e',p.drawingIds||(p.drawingId?[p.drawingId]:[]));
   setEditEquip(p.equipType||'auto');
   updateKwSuggest('edit');
   document.getElementById('editModal')._editIdx=i;
@@ -1466,7 +1533,8 @@ function saveEdit(rerun){
   procs[i].func=func;
   procs[i].equipType=document.getElementById('eEquipAuto').classList.contains('sel-auto')?'auto':'manual';
   procs[i].keywords=document.getElementById('eKeywords').value.trim();
-  procs[i].drawingId=document.getElementById('eDrawing').value||null;
+  procs[i].drawingIds=Array.from(document.querySelectorAll('#eDrawingChecks input:checked')).map(el=>el.value);
+  delete procs[i].drawingId;
   closeEdit();
   saveAll();
   renderList();
@@ -2029,7 +2097,10 @@ function setDrawingLabel(id,label){
 }
 function removeProjDrawing(id){
   projDrawings=projDrawings.filter(d=>d.id!==id);
-  procs.forEach(p=>{ if(p.drawingId===id) p.drawingId=null; });
+  procs.forEach(p=>{
+    if(p.drawingId===id) p.drawingId=null;
+    if(p.drawingIds) p.drawingIds=p.drawingIds.filter(x=>x!==id);
+  });
   persistDrawings();
   saveAll();
   renderDrawingList();
@@ -2137,7 +2208,7 @@ function openAdd(){
   document.getElementById('nName').value='';
   document.getElementById('nFunc').value='';
   document.getElementById('nKeywords').value='';
-  document.getElementById('nDrawing').innerHTML=drawingSelectOptions('');
+  document.getElementById('nDrawingChecks').innerHTML=drawingCheckboxesHtml('n',[]);
   setEquip('auto');
   updateKwSuggest('add');
   document.getElementById('addModal').classList.add('open');
@@ -2186,12 +2257,12 @@ async function addProc(){
   const func=document.getElementById('nFunc').value.trim();
   const equipType=document.getElementById('nEquipAuto').classList.contains('sel-auto')?'auto':'manual';
   const keywords=document.getElementById('nKeywords').value.trim();
-  const drawingId=document.getElementById('nDrawing').value||null;
+  const drawingIds=Array.from(document.querySelectorAll('#nDrawingChecks input:checked')).map(el=>el.value);
   if(!name){ toast('공정명을 입력하세요','err'); return; }
   if(!func){ toast('공정 기능/특성을 입력하세요','err'); return; }
   if(!getKey()){ toast('API 키를 먼저 입력하세요','err'); return; }
   closeAdd();
-  const proc={num,name,func,equipType,keywords,drawingId,status:'analyzing',pfmea:[],cp:[]};
+  const proc={num,name,func,equipType,keywords,drawingIds,status:'analyzing',pfmea:[],cp:[]};
   procs.push(proc);
   cur=procs.length-1;
   renderList(); renderContent();
@@ -2323,46 +2394,39 @@ function extractPartialJson(str){
 function buildPrompt(p){
   const equipLabel=p.equipType==='manual'?'Manual(수동) 공정 — 작업자 개입, 육안검사, 인적오류 중심으로 분석':'AUTO(자동설비) 공정 — 설비 파라미터, 센서, 자동검출, PLC 에러 중심으로 분석';
   const kwLine=p.keywords?`\n- 핵심 키워드 / 관리포인트: ${p.keywords}`:'';
-  // 이 공정에 적용할 도면 결정 (지정된 도면 우선, 없으면 ASSY 우선 기본 도면)
-  const drw=drawingForProc(p);
-  const info=drw&&drw.info;
-  const drwLabel=drw?`${drw.role==='assy'?'ASSY':'하위자재'}${drw.label?' · '+drw.label:''}`:'';
+  // 이 공정에 적용할 도면들 결정 (지정된 도면들 우선, 없으면 ASSY 우선 기본 도면 1장)
+  const drws=drawingsForProc(p);
 
-  // 도면 분석에서 얻은 부품 식별 정보가 있으면 함께 전달 (더 구체적인 PFMEA 작성에 활용)
-  const pid=info&&info.partIdentification;
-  let partLine='';
-  if(pid&&pid.category&&pid.category!=='판단불가'){
-    partLine=`\n\n참고 — 도면 분석으로 추정된 부품 정보 (도면: ${drwLabel}, 신뢰도: ${pid.confidence||'중간'}):
+  // 도면 분석에서 얻은 부품 식별 / 재질 / 치수 정보를 도면별로 함께 전달
+  let partLine='', materialLine='', dimLine='';
+  drws.forEach(drw=>{
+    const info=drw.info;
+    if(!info) return;
+    const drwLabel=`${drw.role==='assy'?'ASSY':'하위자재'}${drw.label?' · '+drw.label:''}`;
+
+    const pid=info.partIdentification;
+    if(pid&&pid.category&&pid.category!=='판단불가'){
+      partLine+=`\n\n참고 — 도면 분석으로 추정된 부품 정보 (도면: ${drwLabel}, 신뢰도: ${pid.confidence||'중간'}):
 - 부품 분류: ${pid.category}
 - 추정 부품명: ${pid.partName_kr||'미상'}
 - 추정 기능: ${pid.function||'미상'}
 - 추정 장착 위치: ${pid.assemblyLocation&&pid.assemblyLocation!=='판단불가'?pid.assemblyLocation:'미상'}
 - 참고: ${pid.criticalityHint||'없음'}
 위 부품 정보를 참고하여, 이 부품/기능에 특화된 더 구체적이고 현실적인 고장모드·원인·관리방법을 도출하세요. 단, 신뢰도가 낮은 추정이므로 도면의 실제 치수·공차·형상 정보가 부품 정보와 상충하면 도면 데이터를 우선하세요.`;
-  }
+    }
 
-  // 여러 도면(ASSY + 하위 자재)이 등록되어 있고 조립관계 요약이 있으면 참고로 전달
-  const assyLine = projAssemblyNotes && projDrawings.length>1
-    ? `\n\n참고 — 등록된 도면들의 조립관계 (ASSY ↔ 하위 자재): ${projAssemblyNotes}`
-    : '';
-
-  // 도면 분석에서 얻은 재질/표면처리 정보를 함께 전달
-  // → 원재료 입고검사, 사출/성형 공정처럼 재질 자체가 핵심 관리대상인 공정에서 빠짐없이 반영되도록 함
-  let materialLine='';
-  if(info&&info.material&&info.material!=='없음'&&info.material!=='판독불가'){
-    const isMaterialCriticalProcess = /원재료|수입검사|입고|레진|소재|재질|성형|사출|소재검사/.test(p.name+' '+p.func);
-    materialLine=`\n\n참고 — 도면에 명시된 재질/표면처리 정보:
+    // → 원재료 입고검사, 사출/성형 공정처럼 재질 자체가 핵심 관리대상인 공정에서 빠짐없이 반영되도록 함
+    if(info.material&&info.material!=='없음'&&info.material!=='판독불가'){
+      const isMaterialCriticalProcess = /원재료|수입검사|입고|레진|소재|재질|성형|사출|소재검사/.test(p.name+' '+p.func);
+      materialLine+=`\n\n참고 — 도면에 명시된 재질/표면처리 정보 (도면: ${drwLabel}):
 - 재질: ${info.material}
 - 표면처리: ${info.surface&&info.surface!=='없음'?info.surface:'명시 없음'}
 ${isMaterialCriticalProcess
   ? '이 공정명/기능에 "원재료/입고/수입검사/레진/소재/재질/성형/사출" 등의 키워드가 포함되어 있어, 위 재질 정보가 이 공정의 핵심 관리 대상입니다. 사용자가 공정 기능에 재질명을 직접 적지 않았더라도, 도면에 명시된 재질(' + info.material + ')을 기준으로 고장모드(예: 재질 오투입, 재질 증명서 누락, 재질 규격 불일치, 수분율/물성 불량 등)와 CP 관리항목(예: 재질 증명서 확인, 적외선분광분석기(FT-IR) 동등성 확인, 입고 성상검사)을 구체적으로 작성하세요.'
   : '이 공정과 관련 있는 경우에만 재질 정보를 참고하여 재질 관련 고장모드(예: 재질 강도 부족, 표면처리 불량 등)를 포함하세요.'}`;
-  }
+    }
 
-  // 도면 분석에서 추출된 실제 치수/공차/SC·CC/GD&T 데이터를 구조화하여 전달
-  // → CP의 spec/feat/char 필드가 도면 분석 결과와 정확히 일치하도록 함 (도면을 다시 읽어 추측하지 않도록)
-  let dimLine='';
-  if(info){
+    // → CP의 spec/feat/char 필드가 도면 분석 결과와 정확히 일치하도록 함 (도면을 다시 읽어 추측하지 않도록)
     const dims=info.dimensions||[];
     const geos=info.geometrics||[];
     const scs=info.sc_items||[];
@@ -2374,25 +2438,33 @@ ${isMaterialCriticalProcess
       }).join('\n');
       const geoRows=geos.map(g=>`  - ${g.symbol}: ${g.value}${g.datum?` (데이텀 ${g.datum})`:''}`).join('\n');
       const scRows=scs.map(s=>`  - ${s}`).join('\n');
-      dimLine=`\n\n참고 — 도면 분석에서 추출된 실제 치수/공차 데이터 (도면: ${drwLabel}, CP의 spec/feat 작성 시 이 값을 그대로 인용할 것, 도면을 다시 추측하지 말 것):
+      dimLine+=`\n\n참고 — 도면 분석에서 추출된 실제 치수/공차 데이터 (도면: ${drwLabel}, CP의 spec/feat 작성 시 이 값을 그대로 인용할 것, 도면을 다시 추측하지 말 것):
 ${dimRows?'[치수/공차 목록]\n'+dimRows:''}
 ${geoRows?'\n[형상·위치공차(GD&T)]\n'+geoRows:''}
-${scRows?'\n[도면에 표시된 SC/CC 핵심특성]\n'+scRows:''}
+${scRows?'\n[도면에 표시된 SC/CC 핵심특성]\n'+scRows:''}`;
+    }
+  });
+  if(dimLine){
+    dimLine+=`
 
 CP 작성 규칙(중요):
 - 위 목록에서 이 공정과 관련된 치수/공차 항목을 CP의 spec 필드에 도면 표기 그대로(공차 포함) 옮겨 적을 것
 - 위 목록에 type이 SC 또는 CC로 표시된 항목, 또는 [SC/CC 핵심특성]에 나열된 항목은 CP의 char를 반드시 그 특성대로 SC 또는 CC로 일치시킬 것 (임의로 일반으로 낮추지 말 것)
 - 도면에 없는 치수를 임의로 만들어내지 말고, 이 공정에서 실제로 관리 가능한 항목만 CP에 포함할 것
 - GD&T(형상·위치공차) 항목이 이 공정의 관리 특성과 관련 있으면 gage(측정기법)에 적합한 측정 방법(예: 3차원측정기/CMM, 형상측정기, 핀게이지 등)을 구체적으로 제시할 것`;
-    }
   }
+
+  // 여러 도면(ASSY + 하위 자재)이 등록되어 있고 조립관계 요약이 있으면 참고로 전달
+  const assyLine = projAssemblyNotes && drws.length>1
+    ? `\n\n참고 — 이 공정에 적용된 도면들의 조립관계 (ASSY ↔ 하위 자재): ${projAssemblyNotes}`
+    : '';
 
   return `공정 정보:
 - 공정번호: ${p.num||'N/A'}
 - 공정명: ${p.name}
 - 공정 기능/특성: ${p.func}
 - 장비 타입: ${equipLabel}${kwLine}${partLine}${assyLine}${materialLine}${dimLine}
-${drw?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악하여 ':''}
+${drws.length?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악하여 ':''}
 이 공정에 대한 PFMEA와 Control Plan을 AIAG-VDA 5th Edition 기준으로 작성해주세요.
 실제 자동차 부품 양산 현장에서 발생 가능한 구체적인 내용으로 전문적으로 작성하세요.`;
 }
@@ -2421,19 +2493,21 @@ async function analyze(idx){
   setPct(0);
 
   try{
-    // 이 공정에 지정된 도면 우선, 없으면 ASSY 우선 기본 도면
-    const drw=drawingForProc(p);
-    const drawingData = drw&&drw.data;
-    const drawingType = drw&&drw.type;
-    const isImg=drawingType&&drawingType.startsWith('image/');
-    const isPdf=drawingType==='application/pdf';
+    // 이 공정에 지정된 도면들 우선, 없으면 ASSY 우선 기본 도면 1장
+    const drws=drawingsForProc(p);
     const content=[];
-    if(drawingData&&(isImg||isPdf)){
+    drws.forEach((drw,i)=>{
+      const isImg=drw.type&&drw.type.startsWith('image/');
+      const isPdf=drw.type==='application/pdf';
+      if(!drw.data||(!isImg&&!isPdf)) return;
+      if(drws.length>1){
+        content.push({type:'text',text:`[도면 ${i+1}] 역할: ${drw.role==='assy'?'ASSY':'하위자재'}${drw.label?', 라벨: '+drw.label:''}`});
+      }
       content.push({
         type:isPdf?'document':'image',
-        source:{type:'base64',media_type:drawingType,data:drawingData}
+        source:{type:'base64',media_type:drw.type,data:drw.data}
       });
-    }
+    });
     content.push({type:'text',text:buildPrompt(p)});
 
     const res=await fetch(API_URL,{
