@@ -1466,10 +1466,10 @@ function renderCP(p,c){
       <thead><tr>
         <th>공정번호</th>
         <th style="text-align:center">공정흐름도</th>
-        <th>공정명/작업설명</th>
+        <th>공정명</th>
         <th>기계/지그/치공구</th>
         <th style="text-align:center">특성</th>
-        <th>관리 특성</th>
+        <th>관리 항목</th>
         <th>규격/공차</th>
         <th>측정기법</th>
         <th style="text-align:center">자동검사</th>
@@ -1485,15 +1485,15 @@ function renderCP(p,c){
       </tr></thead>
       <tbody>
       ${(()=>{
-        // 공정번호·공정흐름도·공정명이 연속으로 동일하면 첫 행에만 표시(rowspan 병합)
+        // 공정번호·공정흐름도가 연속으로 동일하면 첫 행에만 표시(rowspan 병합) — 공정명은 항상 FMEA 공정명(p.name) 그대로 표시
         let html='';
         for(let ri=0; ri<rows.length; ){
           const r=rows[ri];
-          const pnVal=r.pn||p.num, flowVal=r.flow||'MAIN', opVal=r.op||p.name;
+          const pnVal=r.pn||p.num, flowVal=r.flow||'MAIN';
           let span=1;
           while(ri+span<rows.length){
             const n=rows[ri+span];
-            if((n.pn||p.num)===pnVal && (n.flow||'MAIN')===flowVal && (n.op||p.name)===opVal) span++;
+            if((n.pn||p.num)===pnVal && (n.flow||'MAIN')===flowVal) span++;
             else break;
           }
           for(let k=0;k<span;k++){
@@ -1509,7 +1509,7 @@ function renderCP(p,c){
                     <option value="외주"${flowVal==='외주'?' selected':''}>외주</option>
                   </select>
                 </td>
-                <td rowspan="${span}" contenteditable="true" onblur="scGroup(${cur},'cp',${ri},${span},'op',this)">${esc(opVal)}</td>`;
+                <td rowspan="${span}" style="color:var(--text2)" title="FMEA 공정명과 항상 동일하게 표시됩니다 (공정 수정에서 변경)">${esc(p.name)}</td>`;
             }
             html+=`
                 <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'mach',this)">${esc(rw.mach)}</td>
@@ -1601,7 +1601,7 @@ function addRow(){
 }
 function addCpRow(){
   const p=procs[cur];
-  p.cp.push({pn:p.num,flow:'MAIN',op:p.name,mach:'',char:'일반',feat:'',spec:'',auto:'',gage:'',size:'5',freq:'초물/주물',method:'',respProd:'○',respMat:'',respQC:'○',react:'',note:''});
+  p.cp.push({pn:p.num,flow:'MAIN',mach:'',char:'일반',feat:'',spec:'',auto:'',gage:'',size:'5',freq:'초물/주물',method:'',respProd:'○',respMat:'',respQC:'○',react:'',note:''});
   renderContent(); saveAll();
 }
 /* ─ Edit Process Modal ─ */
@@ -2395,10 +2395,9 @@ const SYSTEM_PROMPT=`당신은 AIAG-VDA PFMEA 5th Edition 및 IATF 16949 Control
     {
       "pn": "공정번호",
       "flow": "공정흐름도 분류 — MAIN(자사 주공정) 또는 SUB(자사 보조/검사성 공정) 또는 외주(외주업체 위탁공정) 중 하나. 근거 없으면 MAIN",
-      "op": "공정명/작업설명",
       "mach": "기계/지그/치공구",
       "char": "SC 또는 CC 또는 일반",
-      "feat": "관리 특성",
+      "feat": "관리 항목 — 이 공정에서 실제로 관리해야 할 구체적인 특성/포인트 하나 (예: 구멍 위치도, 전체 길이, 압입 하중, 용접 전류, 재질 확인 등). 공정명이나 작업설명을 반복하지 말고 관리 대상 자체를 적을 것",
       "spec": "규격/공차",
       "auto": "자동검사 여부 — 비전검사기/센서/PLC 등 설비가 자동 판정하면 '○', 작업자 육안·수동 게이지 확인이면 빈 문자열",
       "gage": "측정기법",
@@ -2435,6 +2434,11 @@ PFMEA 평가 기준:
 3. O≥7: 공정 파라미터 관리 강화, SPC 도입, 작업 표준 강화 등 제시
 4. D≥7: 추가 검사 방법, 자동검사 도입, 검출 장치 개선 등 제시
 5. action은 "~을 검토한다" 같은 추상적 표현 금지, 구체적 실행 가능한 내용으로 작성
+
+Control Plan 작성 규칙 — 관리 항목 리스트:
+- 공정명은 화면에서 항상 PFMEA의 공정명을 그대로 사용하므로 cp에는 별도로 넣지 않는다 (op 필드 없음)
+- 하나의 공정(cp 배열)에는 그 공정에서 실제로 관리가 필요한 항목(feat)마다 별도의 행을 만들어 리스트로 구성한다 — 치수/공차, 형상·기능 특성, 안전(SC)/중요(CC) 특성, 공정 파라미터(온도·압력·전류·토크 등) 중 이 공정에 해당하는 것을 모두 포함하여 최소 2개 이상, 근거가 부족하면 1개도 가능하나 남발하지 말 것
+- 각 행의 feat는 서로 다른 구체적 관리 포인트여야 하며, 같은 내용을 문구만 바꿔 중복 생성하지 말 것
 
 Control Plan 작성 규칙 — 공정흐름도/자동검사/관리분담:
 - flow: 공정 정보에 "외주", "사급", "협력사 위탁" 등의 표현이 있으면 "외주", 이 공정이 검사·포장·부자재 준비 등 보조/지원 성격이면 "SUB", 그 외 일반적인 자사 주공정이면 "MAIN"으로 판단 (특별한 근거가 없으면 기본값 MAIN)
@@ -2827,7 +2831,7 @@ function exportExcel(){
       // B/C/D 공정흐름도 — 외주/SUB/MAIN (근거 없으면 MAIN)
       const flow=c.flow||'MAIN';
       if(flow==='외주') d[1]='○'; else if(flow==='SUB') d[2]='○'; else d[3]='○';
-      d[4]=c.op||p.name||'';    // 공정명
+      d[4]=p.name||'';          // 공정명 (FMEA 공정명 그대로)
       d[5]=c.mach||'';          // 설비명
       d[6]=cno++;               // 관리항목 NO
       d[7]=c.feat||'';          // 제품 특성
