@@ -713,9 +713,9 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
       </div>
     </div>
     <div class="fblock">
-      <label>AI 분석 키워드 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(클릭하여 빠른 추가 · 직접 입력도 가능)</span></label>
+      <label>AI 분석 키워드 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(클릭하여 빠른 추가 · 담당자가 아는 현장 체크포인트도 자유롭게 입력)</span></label>
       <div id="nKwSuggest" style="margin-bottom:6px;line-height:1.8"></div>
-      <input id="nKeywords" placeholder="예) SPC, Poka-Yoke, 용접전류, 토크, 비전검사"
+      <input id="nKeywords" placeholder="예) SPC, Poka-Yoke, 용접전류, 토크, 부품수령, 이물혼입"
              style="font-size:12px" oninput="updateKwSuggest('add')">
     </div>
     <div class="modal-actions">
@@ -762,9 +762,9 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
       </div>
     </div>
     <div class="fblock">
-      <label>AI 분석 키워드</label>
+      <label>AI 분석 키워드 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(담당자가 아는 현장 체크포인트도 자유롭게 입력)</span></label>
       <div id="eKwSuggest" style="margin-bottom:6px;line-height:1.8"></div>
-      <input id="eKeywords" placeholder="예) SPC, Poka-Yoke, 용접전류, 토크, 비전검사"
+      <input id="eKeywords" placeholder="예) SPC, Poka-Yoke, 용접전류, 토크, 부품수령, 이물혼입"
              style="font-size:12px" oninput="updateKwSuggest('edit')">
     </div>
     <div class="fblock">
@@ -1572,10 +1572,47 @@ function scvGroup(pi,type,startIdx,count,field,val){
 }
 function esc(s){ return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function rpn(r){ return (r.s||0)*(r.o||0)*(r.d||0); }
+function genId(prefix){ return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
+// PFMEA 행마다 고유 id를 부여하고, CP 행의 fmRef(고장모드 인덱스 참조)를 안정적인 srcFmIds로 변환
+// → 이후 PFMEA에서 행이 삭제/재정렬되어도 어떤 CP 항목이 그 고장모드에서 비롯됐는지 계속 추적 가능
+function linkFmAndCp(pfmeaArr,cpArr){
+  pfmeaArr.forEach(r=>{ if(!r.id) r.id=genId('fm'); });
+  cpArr.forEach(c=>{
+    const refs=Array.isArray(c.fmRef)?c.fmRef:(typeof c.fmRef==='number'?[c.fmRef]:[]);
+    c.srcFmIds=refs.map(i=>pfmeaArr[i]&&pfmeaArr[i].id).filter(Boolean);
+    delete c.fmRef;
+  });
+}
+
+// PFMEA 고장모드 삭제 시, fmRef로 그 고장모드만 참조하던 연관 Control Plan 항목도 함께 정리
+function countLinkedCp(fmIds){
+  const delSet=new Set(fmIds);
+  return (procs[cur].cp||[]).filter(c=>Array.isArray(c.srcFmIds)&&c.srcFmIds.length&&c.srcFmIds.every(id=>delSet.has(id))).length;
+}
+function cascadeDeleteCp(fmIds){
+  const delSet=new Set(fmIds);
+  const cp=procs[cur].cp||[];
+  const toRemove=[];
+  cp.forEach((c,ci)=>{
+    if(!Array.isArray(c.srcFmIds)||!c.srcFmIds.length) return;
+    c.srcFmIds=c.srcFmIds.filter(id=>!delSet.has(id));
+    if(!c.srcFmIds.length) toRemove.push(ci);
+  });
+  toRemove.sort((a,b)=>b-a).forEach(ci=>cp.splice(ci,1));
+  return toRemove.length;
+}
 function delRow(type,ri){
-  procs[cur][type].splice(ri,1);
-  if(type==='pfmea') pfmeaSelected.clear();
+  if(type==='pfmea'){
+    const removedId=procs[cur].pfmea[ri]&&procs[cur].pfmea[ri].id;
+    const cpCount=removedId?countLinkedCp([removedId]):0;
+    if(cpCount>0 && !confirm(`이 고장모드와 연관된 Control Plan 항목 ${cpCount}개도 함께 삭제됩니다. 계속하시겠습니까?`)) return;
+    procs[cur].pfmea.splice(ri,1);
+    pfmeaSelected.clear();
+    if(removedId) cascadeDeleteCp([removedId]);
+  } else {
+    procs[cur][type].splice(ri,1);
+  }
   renderContent(); saveAll();
 }
 function delCpRow(ri){ procs[cur].cp.splice(ri,1); renderContent(); saveAll(); }
@@ -1590,13 +1627,19 @@ function togglePfmeaSelectAll(checked){
 }
 function deleteSelectedPfmeaRows(){
   if(!pfmeaSelected.size) return;
-  if(!confirm(`선택한 ${pfmeaSelected.size}개 고장모드를 삭제하시겠습니까?`)) return;
+  const ids=[...pfmeaSelected].map(i=>procs[cur].pfmea[i]&&procs[cur].pfmea[i].id).filter(Boolean);
+  const cpCount=countLinkedCp(ids);
+  const msg=cpCount>0
+    ? `선택한 ${pfmeaSelected.size}개 고장모드와 연관된 Control Plan 항목 ${cpCount}개도 함께 삭제됩니다. 계속하시겠습니까?`
+    : `선택한 ${pfmeaSelected.size}개 고장모드를 삭제하시겠습니까?`;
+  if(!confirm(msg)) return;
   [...pfmeaSelected].sort((a,b)=>b-a).forEach(i=>procs[cur].pfmea.splice(i,1));
   pfmeaSelected.clear();
+  cascadeDeleteCp(ids);
   renderContent(); saveAll();
 }
 function addRow(){
-  procs[cur].pfmea.push({fm:'',effect:'',s:5,cause:'',o:3,ctrlP:'',ctrlD:'검사',detectMethod:'',d:4,action:''});
+  procs[cur].pfmea.push({id:genId('fm'),fm:'',effect:'',s:5,cause:'',o:3,ctrlP:'',ctrlD:'검사',detectMethod:'',d:4,action:''});
   renderContent(); saveAll();
 }
 function addCpRow(){
@@ -2398,6 +2441,7 @@ const SYSTEM_PROMPT=`당신은 AIAG-VDA PFMEA 5th Edition 및 IATF 16949 Control
       "mach": "기계/지그/치공구",
       "char": "SC 또는 CC 또는 일반",
       "feat": "관리 항목 — 이 공정에서 실제로 관리해야 할 구체적인 특성/포인트 하나 (예: 구멍 위치도, 전체 길이, 압입 하중, 용접 전류, 재질 확인 등). 공정명이나 작업설명을 반복하지 말고 관리 대상 자체를 적을 것",
+      "fmRef": "이 관리 항목이 대응하는 pfmea 배열의 0-based 인덱스 배열 (예: [0,2]). 특정 고장모드의 예방/검출 대책으로 만든 항목이면 반드시 채울 것. 특정 고장모드와 무관한 일반 공정관리 항목이면 빈 배열 []",
       "spec": "규격/공차",
       "auto": "자동검사 여부 — 비전검사기/센서/PLC 등 설비가 자동 판정하면 '○', 작업자 육안·수동 게이지 확인이면 빈 문자열",
       "gage": "측정기법",
@@ -2434,11 +2478,13 @@ PFMEA 평가 기준:
 3. O≥7: 공정 파라미터 관리 강화, SPC 도입, 작업 표준 강화 등 제시
 4. D≥7: 추가 검사 방법, 자동검사 도입, 검출 장치 개선 등 제시
 5. action은 "~을 검토한다" 같은 추상적 표현 금지, 구체적 실행 가능한 내용으로 작성
+6. 사용자가 "담당자가 직접 지정한 핵심 키워드/관리포인트"를 제공한 경우, 각 키워드를 단순 나열하지 말고 그 키워드가 실무적으로 의미하는 구체적 체크포인트·업계 표준 관리방법을 반영한 고장모드/원인/현행관리를 최소 1개 이상 반드시 포함시킬 것
 
 Control Plan 작성 규칙 — 관리 항목 리스트:
 - 공정명은 화면에서 항상 PFMEA의 공정명을 그대로 사용하므로 cp에는 별도로 넣지 않는다 (op 필드 없음)
 - 하나의 공정(cp 배열)에는 그 공정에서 실제로 관리가 필요한 항목(feat)마다 별도의 행을 만들어 리스트로 구성한다 — 치수/공차, 형상·기능 특성, 안전(SC)/중요(CC) 특성, 공정 파라미터(온도·압력·전류·토크 등) 중 이 공정에 해당하는 것을 모두 포함하여 최소 2개 이상, 근거가 부족하면 1개도 가능하나 남발하지 말 것
 - 각 행의 feat는 서로 다른 구체적 관리 포인트여야 하며, 같은 내용을 문구만 바꿔 중복 생성하지 말 것
+- fmRef를 정확히 채우는 것이 중요하다: 사용자가 화면에서 특정 고장모드를 삭제하면 fmRef로 그 고장모드만을 참조하던 cp 항목도 함께 삭제되므로, 실제로 그 고장모드의 대책으로 생성한 cp 항목에는 반드시 해당 인덱스를 넣고, 여러 고장모드에 공통으로 대응하는 항목은 관련된 인덱스를 모두 배열에 포함할 것
 
 Control Plan 작성 규칙 — 공정흐름도/자동검사/관리분담:
 - flow: 공정 정보에 "외주", "사급", "협력사 위탁" 등의 표현이 있으면 "외주", 이 공정이 검사·포장·부자재 준비 등 보조/지원 성격이면 "SUB", 그 외 일반적인 자사 주공정이면 "MAIN"으로 판단 (특별한 근거가 없으면 기본값 MAIN)
@@ -2510,7 +2556,8 @@ function extractPartialJson(str){
 
 function buildPrompt(p){
   const equipLabel=p.equipType==='manual'?'Manual(수동) 공정 — 작업자 개입, 육안검사, 인적오류 중심으로 분석':'AUTO(자동설비) 공정 — 설비 파라미터, 센서, 자동검출, PLC 에러 중심으로 분석';
-  const kwLine=p.keywords?`\n- 핵심 키워드 / 관리포인트: ${p.keywords}`:'';
+  const kwLine=p.keywords?`\n\n참고 — 담당자가 직접 지정한 핵심 키워드/관리포인트: ${p.keywords}
+이 키워드들은 현장 담당자가 실무 경험을 바탕으로 강조한 것이므로, 각 키워드가 실제로 의미하는 구체적인 체크포인트·업계 표준 관리방법을 당신의 전문 지식을 활용해 적극 반영하세요. 키워드를 단순히 언급만 하지 말고, 그로부터 도출되는 실제 고장모드·원인·현행관리를 구체적으로 작성하세요. 예를 들어 키워드가 "부품수령"이면 부품 식별 라벨/자재 표시 확인, 수량 대조, 외관 손상 확인, 보관기한(유효기간) 확인 등 수령 검사의 실무 체크포인트를, "이물혼입"이면 이물 유입 경로 차단, 작업장 청결도 관리, 금속검출기 통과 등을 해당 공정에 맞게 구체적으로 반영하세요.`:'';
   // 이 공정에 적용할 도면들 결정 (지정된 도면들 우선, 없으면 ASSY 우선 기본 도면 1장)
   const drws=drawingsForProc(p);
 
@@ -2690,6 +2737,7 @@ async function analyze(idx){
     setPct(100);
     procs[idx].pfmea=parsed.pfmea||[];
     procs[idx].cp=parsed.cp||[];
+    linkFmAndCp(procs[idx].pfmea,procs[idx].cp);
     procs[idx].status='done';
     procs[idx].fileData=null;
     renderList(); renderContent(); saveAll();
