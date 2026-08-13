@@ -456,6 +456,30 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
   position:absolute;top:8px;right:8px;background:rgba(20,20,30,.72);color:#fff;
   font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:20px;pointer-events:none;
 }
+.drw-pick-hint{
+  position:absolute;top:8px;left:8px;background:var(--warn);color:#fff;pointer-events:none;
+  font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:20px;
+  box-shadow:0 2px 8px rgba(0,0,0,.2);
+}
+.drw-preview{cursor:grab}
+.drw-preview.panning{cursor:grabbing}
+.drw-preview.picking{cursor:crosshair}
+.drw-dragbox{
+  position:absolute;display:none;pointer-events:none;box-sizing:border-box;
+  border:2px dashed var(--warn);background:rgba(217,119,6,.12);
+}
+.drw-pv-zoom{
+  position:absolute;bottom:8px;right:8px;display:flex;align-items:center;gap:1px;
+  background:rgba(20,20,30,.72);border-radius:20px;padding:3px;pointer-events:auto;
+}
+.drw-pv-zoom button{
+  background:none;border:none;color:#fff;width:24px;height:24px;border-radius:50%;
+  cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
+.drw-pv-zoom button:hover{background:rgba(255,255,255,.2)}
+.drw-pv-zoom-label{width:auto!important;padding:0 8px;font-size:10.5px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}
+.dim-locate-edit-ic{float:right;font-size:11px;color:var(--text3);margin-left:5px;cursor:pointer;transition:.12s}
+.dim-locate-edit-ic:hover{color:var(--warn)}
 .drw-meta-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .drw-meta-chip{
   padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;
@@ -1143,6 +1167,13 @@ let _drwAbortCtrl = null; // 도면 종합 분석(startDrawingAnalysis) 중지�
 let _procAbortCtrls = {}; // 공정별 AI 분석(analyze) 중지용, key=procs 배열 인덱스
 let _dimHighlightTarget = null; // 도면 모달에서 클릭한 치수의 위치({page,x,y,w,h}, % 단위) — 도면 하이라이트용
 let _drwPdfDoc = null, _drwPdfDocId = null, _drwPdfCurrentPage = 1, _drwPdfPageCount = 1; // 도면 모달에 로드된 PDF 문서 캐시(페이지 전환용)
+let _drwPdfBaseFitScale = 1; // 초기 "화면에 맞춤" 렌더링 배율(캔버스 표시 크기 계산의 기준)
+let _drwPdfRenderedPixelScale = 1; // 현재 캔버스가 실제로 렌더링된 해상도 배율 (확대 시 재렌더링 필요 여부 판단용)
+let _dimLocatePickIndex = null; // 사용자가 도면을 클릭해 직접 위치를 지정하는 중인 치수의 인덱스 (null이면 지정 모드 아님)
+let _dimPvScale=1, _dimPvOx=0, _dimPvOy=0; // 도면 분석 결과 모달 미리보기의 확대/이동 상태
+let _dimPvDragging=false, _dimPvLx=0, _dimPvLy=0; // 미리보기 팬(이동) 드래그 상태
+let _dimDrawing=false, _dimDrawStartXY=null; // 위치 지정 모드에서 사각형을 드래그로 그리는 중인 상태
+let _dimShouldFrame=false; // true면 다음 applyDimHighlight() 호출 시 해당 치수가 잘 보이도록 자동 확대/이동
 let tab = 'pfmea';
 let pfmeaSelected = new Set(); // PFMEA 테이블에서 체크박스로 선택된 행 인덱스 (일괄 삭제용)
 let upFile = null, upData = null, upType = null;
@@ -2038,6 +2069,8 @@ function renderDrwModal(){
   const body=document.getElementById('drwModalBody');
   const rec=getDrawing(_activeDrwId);
   _dimHighlightTarget=null; // 도면 전환/재렌더 시 이전 하이라이트 초기화
+  _dimLocatePickIndex=null; // 도면 전환 시 진행 중이던 위치 지정 모드도 취소
+  _dimPvScale=1; _dimPvOx=0; _dimPvOy=0; // 확대/이동 상태 초기화
   const switcherHtml=projDrawings.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${projDrawings.map(x=>`
     <button class="btn${x.id===_activeDrwId?' primary':''}" style="font-size:11px;padding:5px 9px" onclick="openDrwModal('${x.id}')">
       ${x.role==='assy'?'ASSY':'하위자재'}${x.label?' · '+esc(x.label):''}${!x.info?' (분석전)':''}
@@ -2063,10 +2096,11 @@ function renderDrwModal(){
     ?`<span class="badge char-sc" style="font-size:9px;margin-left:4px">SC</span>`
     :t==='CC'?`<span class="badge char-cc" style="font-size:9px;margin-left:4px">CC</span>`:'';
 
-  const hasLoc=dim=>(isImg||(isPdf&&rec.data))&&dim.location&&!isNaN(parseLocNum(dim.location.x))&&!isNaN(parseLocNum(dim.location.y));
+  const canLocate=isImg||(isPdf&&rec.data);
+  const hasLoc=dim=>canLocate&&dim.location&&!isNaN(parseLocNum(dim.location.x))&&!isNaN(parseLocNum(dim.location.y));
   const dimCards=(d.dimensions||[]).map((dim,i)=>`
     <div class="dim-card ${typeClass(dim.type)}${hasLoc(dim)?' locatable':''}" ${hasLoc(dim)?`onclick="highlightDim(${i})" title="클릭하면 도면에서 위치를 표시합니다"`:''}>
-      <div class="dim-label">${esc(dim.label)}${typeBadge(dim.type)}${hasLoc(dim)?'<i class="ti ti-focus-2 dim-locate-ic"></i>':''}</div>
+      <div class="dim-label">${esc(dim.label)}${typeBadge(dim.type)}${hasLoc(dim)?'<i class="ti ti-focus-2 dim-locate-ic"></i>':''}${canLocate?`<i class="ti ti-pencil dim-locate-edit-ic" title="도면에서 정확한 위치 직접 지정/수정" onclick="event.stopPropagation();startDimLocatePick(${i})"></i>`:''}</div>
       <div class="dim-value">${esc(dim.value)}${dim.unit&&dim.unit!=='없음'?' <span style="font-size:11px;font-weight:400;color:var(--text3)">'+esc(dim.unit)+'</span>':''}</div>
       ${dim.tolerance&&dim.tolerance!=='없음'?`<div class="dim-tol"><i class="ti ti-arrows-horizontal" style="font-size:10px"></i> ${esc(dim.tolerance)}</div>`:''}
       ${dim.note?`<div class="dim-note">${esc(dim.note)}</div>`:''}
@@ -2105,7 +2139,7 @@ function renderDrwModal(){
 
   body.innerHTML=`
     ${switcherHtml}
-    <div class="drw-preview" id="drwPreviewBox">${previewHtml}<div id="drwHighlight" class="drw-highlight"></div><div id="drwPdfPageIndicator" class="drw-pdf-page-indicator" style="display:none"></div></div>
+    <div class="drw-preview" id="drwPreviewBox" onmousedown="handlePreviewMouseDown(event)" onwheel="handlePreviewWheel(event)">${previewHtml}<div id="drwHighlight" class="drw-highlight"></div><div id="drwDragBox" class="drw-dragbox"></div><div id="drwPdfPageIndicator" class="drw-pdf-page-indicator" style="display:none"></div><div id="drwPickHint" class="drw-pick-hint" style="display:none">드래그해서 정확한 위치 지정 (Esc: 취소)</div><div class="drw-pv-zoom" onmousedown="event.stopPropagation()"><button type="button" onclick="zoomPreview(-0.3)" title="축소"><i class="ti ti-zoom-out"></i></button><button type="button" class="drw-pv-zoom-label" id="drwPvZoomLabel" onclick="resetPreviewZoom()" title="원래 크기로">100%</button><button type="button" onclick="zoomPreview(0.3)" title="확대"><i class="ti ti-zoom-in"></i></button></div></div>
 
     <div class="drw-meta-row">
       <span class="badge${rec.role==='assy'?' badge-ai':''}" style="font-size:9px">${rec.role==='assy'?'ASSY':'하위자재'}</span>
@@ -2176,6 +2210,7 @@ function highlightDim(i){
   const dim=rec&&rec.info&&rec.info.dimensions&&rec.info.dimensions[i];
   if(!dim||!dim.location) return;
   _dimHighlightTarget=dim.location;
+  _dimShouldFrame=true; // 이 치수가 화면에 잘 보이도록 자동으로 확대/이동
   const targetPage=Math.max(1,Math.round(parseLocNum(dim.location.page))||1);
   if(rec.type==='application/pdf'&&targetPage!==_drwPdfCurrentPage){
     renderPdfPreview(rec,targetPage); // 다른 페이지의 치수면 해당 페이지를 다시 렌더링(완료 후 내부에서 하이라이트 적용)
@@ -2183,6 +2218,185 @@ function highlightDim(i){
     applyDimHighlight();
   }
   document.getElementById('drwPreviewBox')?.scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+// AI 추정 위치가 부정확할 때, 사용자가 도면을 직접 클릭해 그 치수의 정확한 위치를 지정/보정
+function startDimLocatePick(i){
+  const rec=getDrawing(_activeDrwId);
+  const dim=rec&&rec.info&&rec.info.dimensions&&rec.info.dimensions[i];
+  const canPreviewIt=rec&&((rec.type&&rec.type.startsWith('image/')&&rec.dataUrl)||(rec.type==='application/pdf'&&rec.data));
+  if(!dim||!canPreviewIt){ toast('이 도면은 미리보기가 없어 위치를 지정할 수 없습니다','err'); return; }
+  _dimLocatePickIndex=i;
+  if(dim.location) highlightDim(i); // 기존 위치가 있으면 우선 보여줌(어느 페이지인지 등 맞춰줌)
+  const box=document.getElementById('drwPreviewBox');
+  box?.classList.add('picking');
+  const hint=document.getElementById('drwPickHint');
+  if(hint) hint.style.display='block';
+  box?.scrollIntoView({behavior:'smooth',block:'center'});
+  toast(`"${dim.label||'이 치수'}" — 도면에서 정확한 위치를 클릭하세요`,'ok');
+}
+function cancelDimLocatePick(){
+  _dimDrawing=false; _dimDrawStartXY=null;
+  const db=document.getElementById('drwDragBox');
+  if(db) db.style.display='none';
+  if(_dimLocatePickIndex==null) return;
+  _dimLocatePickIndex=null;
+  document.getElementById('drwPreviewBox')?.classList.remove('picking');
+  const hint=document.getElementById('drwPickHint');
+  if(hint) hint.style.display='none';
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&_dimLocatePickIndex!=null) cancelDimLocatePick(); });
+
+/* ─ 미리보기 확대/이동(줌·팬) ─ */
+// el(이미지/PDF 캔버스)의 스케일 적용 전 기본 레이아웃 크기를 기준으로, 중앙 기준 오프셋을 계산해 transform 적용
+function applyPreviewTransform(){
+  const el=document.getElementById('drwPreviewEl');
+  const box=document.getElementById('drwPreviewBox');
+  if(!el||!box) return;
+  el.style.transformOrigin='0 0';
+  const ww=box.clientWidth, wh=box.clientHeight;
+  const bw=el.offsetWidth, bh=el.offsetHeight; // transform 영향을 받지 않는 레이아웃 상 기본 크기
+  if(!bw||!bh) return;
+  const cx=ww/2+_dimPvOx, cy=wh/2+_dimPvOy;
+  const ox=cx-bw*_dimPvScale/2, oy=cy-bh*_dimPvScale/2;
+  el.style.transform=`translate(${ox}px,${oy}px) scale(${_dimPvScale})`;
+  const label=document.getElementById('drwPvZoomLabel');
+  if(label) label.textContent=Math.round(_dimPvScale*100)+'%';
+}
+function zoomPreview(delta){
+  const prev=_dimPvScale;
+  _dimPvScale=Math.min(Math.max(prev+delta,0.5),8);
+  _dimPvOx*=_dimPvScale/prev; _dimPvOy*=_dimPvScale/prev;
+  applyPreviewTransform();
+  scheduleMaybeUpscalePdf();
+}
+function resetPreviewZoom(){
+  _dimPvScale=1; _dimPvOx=0; _dimPvOy=0;
+  applyPreviewTransform();
+}
+function handlePreviewWheel(ev){
+  const box=document.getElementById('drwPreviewBox');
+  const el=document.getElementById('drwPreviewEl');
+  if(!box||!el) return;
+  ev.preventDefault();
+  const rect=box.getBoundingClientRect();
+  const mx=ev.clientX-rect.left-rect.width/2;
+  const my=ev.clientY-rect.top-rect.height/2;
+  const prev=_dimPvScale;
+  const delta=ev.deltaY<0?0.18:-0.18;
+  _dimPvScale=Math.min(Math.max(prev+delta,0.5),8);
+  _dimPvOx=mx-(_dimPvScale/prev)*(mx-_dimPvOx);
+  _dimPvOy=my-(_dimPvScale/prev)*(my-_dimPvOy);
+  applyPreviewTransform();
+  scheduleMaybeUpscalePdf();
+}
+// 특정 위치(loc, % 단위)가 화면에 적당히 크게 보이도록 자동으로 확대하고 중앙에 오도록 이동
+function frameDimTarget(loc){
+  const el=document.getElementById('drwPreviewEl');
+  if(!el) return;
+  const bw=el.offsetWidth, bh=el.offsetHeight;
+  if(!bw||!bh) return;
+  const x=Math.max(0,Math.min(100,parseLocNum(loc.x)||0));
+  const y=Math.max(0,Math.min(100,parseLocNum(loc.y)||0));
+  const w=Math.max(1,parseLocNum(loc.w)||8);
+  const h=Math.max(1,parseLocNum(loc.h)||8);
+  _dimPvScale=Math.min(6,Math.max(1.5,22/Math.max(w,h))); // 대상 박스가 화면 폭의 대략 22% 정도를 차지하도록 확대
+  const centerXBase=((x+w/2)/100)*bw-bw/2; // 이미지 중심 대비 대상 중심의 오프셋(px, scale=1 기준)
+  const centerYBase=((y+h/2)/100)*bh-bh/2;
+  _dimPvOx=-centerXBase*_dimPvScale;
+  _dimPvOy=-centerYBase*_dimPvScale;
+  applyPreviewTransform();
+  scheduleMaybeUpscalePdf();
+}
+
+/* ─ 미리보기 드래그: 위치 지정 모드면 사각형 그리기, 아니면 화면 이동(팬) ─ */
+function handlePreviewMouseDown(ev){
+  if(ev.button!==0) return;
+  if(_dimLocatePickIndex!=null){
+    _dimDrawing=true;
+    _dimDrawStartXY={x:ev.clientX,y:ev.clientY};
+    updateDragBox(ev.clientX,ev.clientY,ev.clientX,ev.clientY);
+    ev.preventDefault();
+  }else{
+    _dimPvDragging=true; _dimPvLx=ev.clientX; _dimPvLy=ev.clientY;
+    document.getElementById('drwPreviewBox')?.classList.add('panning');
+    ev.preventDefault();
+  }
+}
+document.addEventListener('mousemove',(ev)=>{
+  if(_dimDrawing&&_dimDrawStartXY){
+    updateDragBox(_dimDrawStartXY.x,_dimDrawStartXY.y,ev.clientX,ev.clientY);
+  }else if(_dimPvDragging){
+    _dimPvOx+=ev.clientX-_dimPvLx; _dimPvOy+=ev.clientY-_dimPvLy;
+    _dimPvLx=ev.clientX; _dimPvLy=ev.clientY;
+    applyPreviewTransform();
+  }
+});
+document.addEventListener('mouseup',(ev)=>{
+  if(_dimDrawing) finishDimDraw(ev.clientX,ev.clientY);
+  if(_dimPvDragging){
+    _dimPvDragging=false;
+    document.getElementById('drwPreviewBox')?.classList.remove('panning');
+  }
+});
+function updateDragBox(x1,y1,x2,y2){
+  const box=document.getElementById('drwPreviewBox');
+  const db=document.getElementById('drwDragBox');
+  if(!box||!db) return;
+  const rect=box.getBoundingClientRect();
+  const left=Math.min(x1,x2)-rect.left, top=Math.min(y1,y2)-rect.top;
+  db.style.cssText=`left:${left}px;top:${top}px;width:${Math.abs(x2-x1)}px;height:${Math.abs(y2-y1)}px;display:block`;
+}
+// 위치 지정 모드에서 드래그를 마치면, 그린 사각형(또는 거의 움직이지 않았으면 클릭 지점 중심의 작은 박스)을 %좌표로 변환해 저장
+function finishDimDraw(endX,endY){
+  _dimDrawing=false;
+  const db=document.getElementById('drwDragBox');
+  if(db) db.style.display='none';
+  const start=_dimDrawStartXY; _dimDrawStartXY=null;
+  if(!start||_dimLocatePickIndex==null) return;
+  const i=_dimLocatePickIndex;
+  const rec=getDrawing(_activeDrwId);
+  const el=document.getElementById('drwPreviewEl');
+  if(!rec||!el||!rec.info||!rec.info.dimensions||!rec.info.dimensions[i]) return;
+  const elRect=el.getBoundingClientRect();
+  const dragDist=Math.hypot(endX-start.x,endY-start.y);
+  let x1,y1,x2,y2;
+  if(dragDist<6){
+    // 거의 움직이지 않았으면 단순 클릭으로 간주 — 클릭 지점을 중심으로 한 작은 고정 크기 박스
+    const cxPct=((endX-elRect.left)/elRect.width)*100;
+    const cyPct=((endY-elRect.top)/elRect.height)*100;
+    const hw=2,hh=1.5;
+    x1=cxPct-hw; y1=cyPct-hh; x2=cxPct+hw; y2=cyPct+hh;
+  }else{
+    x1=((start.x-elRect.left)/elRect.width)*100;
+    y1=((start.y-elRect.top)/elRect.height)*100;
+    x2=((endX-elRect.left)/elRect.width)*100;
+    y2=((endY-elRect.top)/elRect.height)*100;
+  }
+  const xMin=Math.max(0,Math.min(x1,x2)), xMax=Math.min(100,Math.max(x1,x2));
+  const yMin=Math.max(0,Math.min(y1,y2)), yMax=Math.min(100,Math.max(y1,y2));
+  const loc={
+    page: rec.type==='application/pdf'?_drwPdfCurrentPage:1,
+    x:xMin, y:yMin, w:Math.max(0.5,xMax-xMin), h:Math.max(0.5,yMax-yMin)
+  };
+  rec.info.dimensions[i].location=loc;
+  persistDrawings();
+  cancelDimLocatePick();
+  _dimHighlightTarget=loc;
+  applyDimHighlight();
+  const card=document.querySelectorAll('.dim-card')[i];
+  if(card&&!card.classList.contains('locatable')){
+    card.classList.add('locatable');
+    card.title='클릭하면 도면에서 위치를 표시합니다';
+    card.addEventListener('click',()=>highlightDim(i));
+    const labelEl=card.querySelector('.dim-label');
+    if(labelEl&&!labelEl.querySelector('.dim-locate-ic')){
+      const ic=document.createElement('i');
+      ic.className='ti ti-focus-2 dim-locate-ic';
+      labelEl.insertBefore(ic,labelEl.querySelector('.dim-locate-edit-ic'));
+    }
+  }
+  toast('위치가 저장되었습니다','ok');
 }
 function applyDimHighlight(){
   const box=document.getElementById('drwPreviewBox');
@@ -2192,10 +2406,11 @@ function applyDimHighlight(){
   if(el.tagName==='IMG'&&(!el.complete||!el.naturalWidth)) return; // 이미지 로드 완료 후 다시 시도 (onload에서 재호출됨)
   if(el.tagName==='CANVAS'&&(el.style.display==='none'||!el.width)) return; // PDF 렌더링 완료 후 다시 시도 (renderPdfPreview에서 재호출됨)
   const loc=_dimHighlightTarget;
+  if(_dimShouldFrame){ _dimShouldFrame=false; frameDimTarget(loc); } // 치수가 화면에 잘 보이도록 자동 확대/이동 (elRect는 이후 변경된 transform 기준으로 다시 읽음)
   const x=Math.min(96,Math.max(0,parseLocNum(loc.x)||0));
   const y=Math.min(96,Math.max(0,parseLocNum(loc.y)||0));
-  const w=Math.min(100-x,Math.max(4,parseLocNum(loc.w)||8));
-  const h=Math.min(100-y,Math.max(4,parseLocNum(loc.h)||8));
+  const w=Math.min(100-x,Math.max(1,parseLocNum(loc.w)||8));
+  const h=Math.min(100-y,Math.max(1,parseLocNum(loc.h)||8));
   const boxRect=box.getBoundingClientRect();
   const elRect=el.getBoundingClientRect();
   const left=(elRect.left-boxRect.left)+(x/100)*elRect.width;
@@ -2222,7 +2437,9 @@ function loadPdfJs(){
   });
   return _pdfJsLoadPromise;
 }
-async function renderPdfPreview(rec,pageNum){
+// pixelScaleOverride가 있으면 화질 향상용 재렌더링: 화면 표시 크기(canvas.style.width/height)는 그대로 두고
+// 캔버스 내부 해상도만 올려서 다시 그린다 (줌/팬 좌표 계산 기준인 offsetWidth/Height가 안 바뀌므로 안전)
+async function renderPdfPreview(rec,pageNum,pixelScaleOverride){
   pageNum=pageNum||1;
   const myToken=++_drwPdfRenderToken;
   try{
@@ -2243,22 +2460,31 @@ async function renderPdfPreview(rec,pageNum){
     if(myToken!==_drwPdfRenderToken) return;
     const canvas=document.getElementById('drwPreviewEl');
     if(!canvas) return;
-    const targetWidth=Math.min(canvas.parentElement.clientWidth||600,900);
-    const targetMaxHeight=600; // .drw-preview의 max-height와 맞춰 세로로 긴 도면이 찌그러지지 않도록 함
     const baseViewport=page.getViewport({scale:1});
     const dpr=window.devicePixelRatio||1;
-    const fitScale=Math.min(targetWidth/baseViewport.width,targetMaxHeight/baseViewport.height);
-    const scale=fitScale*dpr;
+    let scale;
+    if(pixelScaleOverride){
+      scale=pixelScaleOverride; // 표시 크기는 그대로, 해상도만 이 배율로 재렌더링
+    }else{
+      const targetWidth=Math.min(canvas.parentElement.clientWidth||600,900);
+      const targetMaxHeight=600; // .drw-preview의 max-height와 맞춰 세로로 긴 도면이 찌그러지지 않도록 함
+      const fitScale=Math.min(targetWidth/baseViewport.width,targetMaxHeight/baseViewport.height);
+      _drwPdfBaseFitScale=fitScale;
+      scale=fitScale*dpr;
+    }
     const viewport=page.getViewport({scale});
     canvas.width=viewport.width; canvas.height=viewport.height;
-    canvas.style.width=(viewport.width/dpr)+'px';
-    canvas.style.height=(viewport.height/dpr)+'px';
+    if(!pixelScaleOverride){
+      canvas.style.width=(viewport.width/dpr)+'px';
+      canvas.style.height=(viewport.height/dpr)+'px';
+    }
     await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
     if(myToken!==_drwPdfRenderToken) return;
     canvas.style.display='inline-block';
     const fallback=document.getElementById('drwPdfFallback');
     if(fallback) fallback.style.display='none';
     _drwPdfCurrentPage=pageNum;
+    _drwPdfRenderedPixelScale=scale; // 현재 캔버스가 실제로 렌더링된 해상도 배율 (확대 시 재렌더링 필요 여부 판단용)
     const pageInd=document.getElementById('drwPdfPageIndicator');
     if(pageInd){
       if(_drwPdfPageCount>1){ pageInd.textContent=`${pageNum} / ${_drwPdfPageCount} 페이지`; pageInd.style.display='block'; }
@@ -2270,6 +2496,22 @@ async function renderPdfPreview(rec,pageNum){
     const status=document.getElementById('drwPdfStatus');
     if(status) status.textContent='미리보기를 불러올 수 없습니다 (원본은 카드의 아이콘 클릭 시 확인 가능)';
   }
+}
+// 확대 중 일정 배율을 넘으면(현재 렌더링 해상도 대비 화면이 더 커지면) pdf.js로 더 높은 해상도로 다시 렌더링해 선명하게 유지
+// (이미지(JPG/PNG) 도면은 원본 해상도가 한계라 이 방식이 적용되지 않음 — <canvas>일 때만 동작)
+let _pdfUpscaleTimer=null;
+function scheduleMaybeUpscalePdf(){
+  const el=document.getElementById('drwPreviewEl');
+  if(!el||el.tagName!=='CANVAS') return;
+  clearTimeout(_pdfUpscaleTimer);
+  _pdfUpscaleTimer=setTimeout(()=>{
+    const dpr=window.devicePixelRatio||1;
+    const neededScale=_drwPdfBaseFitScale*dpr*Math.min(_dimPvScale,8);
+    if(neededScale<=_drwPdfRenderedPixelScale*1.15) return; // 이미 충분히 선명하면 다시 그리지 않음
+    const rec=getDrawing(_activeDrwId);
+    if(!rec||rec.type!=='application/pdf') return;
+    renderPdfPreview(rec,_drwPdfCurrentPage,neededScale);
+  },220);
 }
 
 /* ─ Drawing Viewer ─ */
