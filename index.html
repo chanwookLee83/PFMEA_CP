@@ -442,44 +442,69 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
   display:flex;align-items:center;justify-content:center;
   min-height:320px;max-height:620px;position:relative
 }
-.drw-preview img{max-width:100%;max-height:620px;object-fit:contain;display:block}
-.drw-highlight{
-  position:absolute;display:none;pointer-events:none;box-sizing:border-box;
-  border:2px solid var(--warn);background:rgba(217,119,6,.18);border-radius:4px;
-  animation:dimPulse 1.3s ease-in-out infinite;
-}
-@keyframes dimPulse{
-  0%,100%{box-shadow:0 0 0 3px rgba(217,119,6,.18)}
-  50%{box-shadow:0 0 0 8px rgba(217,119,6,.04)}
-}
-.drw-pdf-page-indicator{
-  position:absolute;top:8px;right:8px;background:rgba(20,20,30,.72);color:#fff;
-  font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:20px;pointer-events:none;
-}
-.drw-pick-hint{
-  position:absolute;top:8px;left:8px;background:var(--warn);color:#fff;pointer-events:none;
-  font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:20px;
-  box-shadow:0 2px 8px rgba(0,0,0,.2);
-}
+.drw-preview img,.drw-preview canvas{max-width:100%;max-height:620px;object-fit:contain;display:block;transition:transform .15s ease}
 .drw-preview{cursor:grab}
 .drw-preview.panning{cursor:grabbing}
-.drw-preview.picking{cursor:crosshair}
-.drw-dragbox{
-  position:absolute;display:none;pointer-events:none;box-sizing:border-box;
-  border:2px dashed var(--warn);background:rgba(217,119,6,.12);
-}
+.drw-preview.panning img,.drw-preview.panning canvas{transition:none}
 .drw-pv-zoom{
   position:absolute;bottom:8px;right:8px;display:flex;align-items:center;gap:1px;
-  background:rgba(20,20,30,.72);border-radius:20px;padding:3px;pointer-events:auto;
+  background:rgba(20,20,30,.72);border-radius:20px;padding:3px;
+  z-index:3
 }
 .drw-pv-zoom button{
   background:none;border:none;color:#fff;width:24px;height:24px;border-radius:50%;
   cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0
 }
 .drw-pv-zoom button:hover{background:rgba(255,255,255,.2)}
-.drw-pv-zoom-label{width:auto!important;padding:0 8px;font-size:10.5px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}
-.dim-locate-edit-ic{float:right;font-size:11px;color:var(--text3);margin-left:5px;cursor:pointer;transition:.12s}
-.dim-locate-edit-ic:hover{color:var(--warn)}
+.drw-pv-zoom-label{width:auto!important;padding:0 8px;font-size:10.5px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums;cursor:pointer}
+.drw-dim-overlay{
+  position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px;
+  width:min(240px,calc(100% - 16px));z-index:2;pointer-events:none
+}
+.drw-dim-overlay-header{
+  display:flex;align-items:center;justify-content:space-between;gap:6px;
+  padding:4px 8px;border-radius:9px;border:1px solid rgba(148,163,184,.24);
+  background:rgba(15,23,42,.72);color:#e2e8f0;font-size:9.5px;font-weight:700;
+  letter-spacing:.5px;text-transform:uppercase;backdrop-filter:blur(5px)
+}
+.drw-dim-overlay-header span:last-child{color:#7dd3fc;font-size:9.5px}
+.drw-dim-overlay-chip{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:4px 8px;border-radius:9px;border:1px solid rgba(96,165,250,.28);
+  background:rgba(15,23,42,.92);color:#e2e8f0;box-shadow:0 8px 18px rgba(15,23,42,.22);
+  backdrop-filter:blur(5px);cursor:pointer;pointer-events:auto;transition:.12s ease
+}
+.drw-dim-overlay-chip:hover{transform:translateY(-1px);border-color:rgba(125,211,252,.7);box-shadow:0 10px 18px rgba(14,116,144,.18)}
+.drw-dim-overlay-chip.sc{border-left:3px solid var(--danger);background:rgba(0, 14, 58, 0.92)}
+.drw-dim-overlay-chip.cc{border-left:3px solid var(--warn);background:rgba(19, 107, 179, 0.92)}
+.drw-dim-overlay-chip:active{transform:scale(.99)}
+.drw-dim-overlay-name{font-size:9.8px;color:#dbeafe;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:92px}
+/* 마우스오버/포커스 시 잘린 이름이 옆 폭(240px) 안에서 줄바꿈되며 전체가 보이도록 */
+.drw-dim-overlay-chip:hover .drw-dim-overlay-name,.drw-dim-overlay-chip:focus-within .drw-dim-overlay-name{
+  max-width:none;white-space:normal;overflow:visible;text-overflow:clip
+}
+.drw-dim-overlay-chip:hover,.drw-dim-overlay-chip:focus-within{z-index:6;align-items:flex-start}
+.drw-dim-overlay-value{font-size:11.5px;font-weight:700;color:#fff;font-family:monospace;white-space:nowrap}
+.drw-dim-overlay-unit{font-size:9.5px;color:#cbd5e1;margin-left:4px}
+.drw-compare-toolbar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.drw-compare-tab{
+  border:1px solid var(--border);background:var(--bg2);color:var(--text2);padding:4px 9px;border-radius:999px;
+  cursor:pointer;font-size:10.5px;font-weight:600;transition:.12s ease
+}
+.drw-compare-tab.active{
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent;box-shadow:0 8px 18px rgba(59,130,246,.22)
+}
+.drw-compare-tab:hover{border-color:var(--border2);color:var(--text1)}
+.drw-dim-legend{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:-1px 0 10px;color:var(--text2);font-size:10px}
+.drw-dim-legend-item{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border-radius:999px;border:1px solid var(--border);background:var(--bg2)}
+.drw-dim-legend-swatch{width:8px;height:8px;border-radius:50%;display:inline-block}
+.drw-dim-legend-swatch.primary{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.drw-dim-legend-swatch.sc{background:var(--danger)}
+.drw-dim-legend-swatch.cc{background:var(--warn)}
+.dim-card.dim-focused{
+  border-color:var(--accent2);box-shadow:0 0 0 2px rgba(125,211,252,.18),0 10px 18px rgba(59,130,246,.12);background:rgba(96,165,250,.05)
+}
+.dim-card.dim-focused .dim-value{color:var(--accent2)}
 .drw-meta-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .drw-meta-chip{
   padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;
@@ -497,14 +522,23 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
 .dim-card:hover{border-color:var(--border2);background:var(--bg3)}
 .dim-card.sc{border-left:3px solid var(--danger);background:rgba(239,68,68,.03)}
 .dim-card.cc{border-left:3px solid var(--warn);background:rgba(245,158,11,.03)}
-.dim-card.locatable{cursor:pointer}
-.dim-card.locatable:hover{border-color:var(--warn);box-shadow:0 0 0 1px var(--warn) inset}
-.dim-locate-ic{float:right;font-size:11px;color:var(--warn)}
 .dim-label{font-size:13px;color:var(--text2);margin-bottom:3px;
   text-transform:uppercase;letter-spacing:.5px;font-weight:600}
-.dim-value{font-size:18px;font-weight:700;color:var(--text1);font-family:monospace}
+.dim-view{font-size:10.5px;color:var(--accent2);margin-bottom:4px;display:flex;align-items:center;gap:3px;font-weight:600}
+.dim-value{font-size:15px;font-weight:700;color:var(--text1);font-family:monospace}
 .dim-tol{font-size:14px;color:var(--text1);margin-top:2px;font-weight:500}
 .dim-note{font-size:13.5px;color:var(--text2);margin-top:2px}
+.dim-meta-stack{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.dim-meta-chip{
+  display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:999px;
+  font-size:9.5px;font-weight:700;background:var(--bg3);border:1px solid var(--border);color:var(--text2)
+}
+.dim-meta-chip.primary{background:rgba(79,124,255,.09);color:#1f3fc7;border-color:rgba(79,124,255,.25)}
+.dim-meta-chip.warn{background:rgba(245,158,11,.08);color:#b45309;border-color:rgba(245,158,11,.25)}
+.dim-meta-chip.danger{background:rgba(239,68,68,.08);color:#b91c1c;border-color:rgba(239,68,68,.25)}
+.dim-editable{outline:none;border-radius:3px;padding:0 1px;cursor:text}
+.dim-editable:hover{background:rgba(217,119,6,.08)}
+.dim-editable:focus{background:var(--bg4);box-shadow:inset 0 -2px 0 var(--accent)}
 .gdt-table{width:100%;border-collapse:collapse;font-size:12.5px}
 .gdt-table th{padding:5px 8px;background:var(--bg3);color:var(--text2);
   font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);font-weight:700}
@@ -530,7 +564,7 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
   padding:3px 9px;border-radius:20px}
 .part-id-conf{font-size:13px;font-weight:700}
 .part-id-name{font-size:18px;font-weight:700;color:var(--text1);margin-bottom:8px}
-.part-id-line{font-size:15.5px;color:var(--text1);line-height:1.65;margin-bottom:3px}
+.part-id-line{font-size:13px;color:var(--text1);line-height:1.65;margin-bottom:3px}
 .part-id-line b{color:var(--text1);font-weight:700;margin-right:4px}
 .analyze-btn-row{display:flex;gap:6px;margin-top:6px}
 .part-hint-input{
@@ -943,6 +977,17 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
         <button onclick="toggleApiVis()" class="btn" style="padding:6px 9px;flex-shrink:0" title="표시/숨김"><i class="ti ti-eye" id="apiVisIcon" style="font-size:14px"></i></button>
       </div>
     </div>
+    <div class="fblock">
+      <label>Anthropic 모델</label>
+      <select id="apiModelSelect" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;color:var(--text1);font-size:13px;outline:none">
+        <option value="">직접 입력</option>
+        <option value="claude-sonnet-5">claude-sonnet-5 (권장 · 균형)</option>
+        <option value="claude-opus-5">claude-opus-5 (최고 성능)</option>
+        <option value="claude-haiku-4-5">claude-haiku-4-5 (빠름 · 저비용)</option>
+      </select>
+      <input id="apiModelInput" type="text" placeholder="Console에서 보이는 정확한 모델명 입력 (예: claude-sonnet-5)" style="margin-top:8px;width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;color:var(--text1);font-size:12px;outline:none">
+      <div id="apiModelStatus" style="margin-top:8px;font-size:11px;color:var(--text2)">현재 사용 모델: </div>
+    </div>
     <div id="apiCurrentStatus" style="font-size:11px;color:var(--text3);margin-top:-4px;margin-bottom:10px"></div>
     <a href="https://console.anthropic.com/settings/keys" target="_blank"
        style="font-size:11px;color:var(--accent2);text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-bottom:14px">
@@ -1161,19 +1206,32 @@ function deleteUser(id){
 
 /* ─ State ─ */
 const API_URL = 'https://api.anthropic.com/v1/messages';
+// thinking(adaptive)을 지원하지 않는 구형/경량 모델(예: haiku)을 선택한 경우
+// 첫 요청이 400으로 거부되면 thinking 파라미터를 제거하고 한 번 더 시도한다.
+async function fetchClaudeMessages(bodyObj, signal){
+  const headers={'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
+  let res=await fetch(API_URL,{method:'POST',headers,body:JSON.stringify(bodyObj),signal});
+  if(!res.ok && bodyObj.thinking){
+    let detail='';
+    try{ detail=(await res.clone().json())?.error?.message||''; }catch(_){}
+    if(res.status===400 && /thinking/i.test(detail)){
+      const retryBody={...bodyObj};
+      delete retryBody.thinking;
+      res=await fetch(API_URL,{method:'POST',headers,body:JSON.stringify(retryBody),signal});
+    }
+  }
+  return res;
+}
 let procs = [];
 let cur = -1;
 let _drwAbortCtrl = null; // 도면 종합 분석(startDrawingAnalysis) 중지용
 let _procAbortCtrls = {}; // 공정별 AI 분석(analyze) 중지용, key=procs 배열 인덱스
-let _dimHighlightTarget = null; // 도면 모달에서 클릭한 치수의 위치({page,x,y,w,h}, % 단위) — 도면 하이라이트용
-let _drwPdfDoc = null, _drwPdfDocId = null, _drwPdfCurrentPage = 1, _drwPdfPageCount = 1; // 도면 모달에 로드된 PDF 문서 캐시(페이지 전환용)
+let _drwPdfDoc = null, _drwPdfDocId = null; // 도면 모달에 로드된 PDF 문서 캐시
+let _dimPvScale = 1, _dimPvOx = 0, _dimPvOy = 0; // 도면 분석 결과 모달 미리보기의 확대 배율/이동 오프셋
+let _dimPvDragging = false, _dimPvLx = 0, _dimPvLy = 0; // 미리보기 드래그 이동 상태
 let _drwPdfBaseFitScale = 1; // 초기 "화면에 맞춤" 렌더링 배율(캔버스 표시 크기 계산의 기준)
+let _drwDimViewMode = 'priority'; // 도면 분석 결과 모달의 치수 보기 모드 (priority/critical/all)
 let _drwPdfRenderedPixelScale = 1; // 현재 캔버스가 실제로 렌더링된 해상도 배율 (확대 시 재렌더링 필요 여부 판단용)
-let _dimLocatePickIndex = null; // 사용자가 도면을 클릭해 직접 위치를 지정하는 중인 치수의 인덱스 (null이면 지정 모드 아님)
-let _dimPvScale=1, _dimPvOx=0, _dimPvOy=0; // 도면 분석 결과 모달 미리보기의 확대/이동 상태
-let _dimPvDragging=false, _dimPvLx=0, _dimPvLy=0; // 미리보기 팬(이동) 드래그 상태
-let _dimDrawing=false, _dimDrawStartXY=null; // 위치 지정 모드에서 사각형을 드래그로 그리는 중인 상태
-let _dimShouldFrame=false; // true면 다음 applyDimHighlight() 호출 시 해당 치수가 잘 보이도록 자동 확대/이동
 let tab = 'pfmea';
 let pfmeaSelected = new Set(); // PFMEA 테이블에서 체크박스로 선택된 행 인덱스 (일괄 삭제용)
 let upFile = null, upData = null, upType = null;
@@ -1282,14 +1340,43 @@ function updateApiKeyBtn(){
     btn.title='API 키 입력 필요';
   }
 }
+function getDrawingAnalysisModel(){
+  const candidates=['claude-sonnet-5','claude-opus-5','claude-haiku-4-5'];
+  const saved=(localStorage.getItem('pfmea_model') || localStorage.getItem('pfmea_drw_model') || '').trim();
+  // 예전 버전에서 저장된, 이제는 폐기(retired)된 모델 ID는 무시하고 현재 모델로 대체
+  const retired=['claude-sonnet-4-20250514','claude-3-7-sonnet-20250219','claude-3-5-sonnet-20241022','claude-3-5-sonnet-20240620','claude-3-opus-20240229','claude-3-sonnet-20240229','claude-3-5-haiku-20241022','claude-3-haiku-20240307'];
+  if(saved && !retired.includes(saved)) return saved;
+  return candidates[0];
+}
+function saveSelectedModel(model){
+  if(!model) return;
+  localStorage.setItem('pfmea_model', model.trim());
+}
+function inferDrawingMime(file){
+  const name=(file.name||'').toLowerCase();
+  if(file.type && file.type.trim()) return file.type;
+  if(name.endsWith('.pdf')) return 'application/pdf';
+  if(/\.(png|jpg|jpeg|webp|bmp|gif)$/.test(name)) return 'image/png';
+  return 'application/octet-stream';
+}
 
 /* ─ API Key Modal ─ */
 function openApiModal(){
   const cur = getKey();
   const inp = document.getElementById('apiModalInput');
+  const modelSel = document.getElementById('apiModelSelect');
+  const modelInput = document.getElementById('apiModelInput');
   inp.value = cur || '';
   inp.type = 'password';
   document.getElementById('apiVisIcon').className='ti ti-eye';
+  const currentModel = getDrawingAnalysisModel();
+  if(modelSel){
+    if([...modelSel.options].some(o=>o.value===currentModel)) modelSel.value = currentModel;
+    else modelSel.value = '';
+  }
+  if(modelInput){
+    modelInput.value = currentModel;
+  }
   const status = document.getElementById('apiCurrentStatus');
   if(cur){
     const masked = cur.slice(0,12)+'••••••••'+cur.slice(-4);
@@ -1297,6 +1384,8 @@ function openApiModal(){
   } else {
     status.innerHTML='<i class="ti ti-alert-triangle" style="color:var(--warn);font-size:11px"></i> 저장된 API 키 없음';
   }
+  const modelStatus = document.getElementById('apiModelStatus');
+  if(modelStatus) modelStatus.textContent = `현재 사용 모델: ${currentModel}`;
   document.getElementById('apiModal').classList.add('open');
   setTimeout(()=>inp.focus(),100);
 }
@@ -1305,9 +1394,15 @@ function closeApiModal(){
 }
 function saveApiModal(){
   const v = document.getElementById('apiModalInput').value.trim();
+  const modelSel = document.getElementById('apiModelSelect');
+  const modelInput = document.getElementById('apiModelInput');
   if(!v){ toast('API 키를 입력하세요','err'); return; }
   if(!v.startsWith('sk-')){
     toast('올바른 API 키 형식이 아닙니다 (sk-... 로 시작)','err'); return;
+  }
+  const rawModel = (modelInput && modelInput.value ? modelInput.value : (modelSel ? modelSel.value : '')).trim();
+  if(rawModel){
+    saveSelectedModel(rawModel);
   }
   localStorage.setItem('pfmea_apikey', v);
   closeApiModal();
@@ -1708,7 +1803,19 @@ function scvGroup(pi,type,startIdx,count,field,val){
   }
   saveAll();
 }
-function esc(s){ return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// AI가 반환한 필드가 배열이어야 하는데 단일 객체/문자열/null 등으로 오는 경우를 방어
+// asArr: 배열이면 그대로, 값이 있으면 [값]으로 감싸고, 없으면 빈 배열
+// asObjArr: asArr 결과에서 객체가 아닌 항목(문자열/숫자/null 등)은 제거 — 항목별 필드(.type/.label 등) 접근 시 크래시 방지
+function asArr(x){ return Array.isArray(x)?x:(x!=null?[x]:[]); }
+function asObjArr(x){ return asArr(x).filter(v=>v&&typeof v==='object'); }
+function esc(s){
+  // AI가 생성한 JSON은 문자열이어야 할 필드가 숫자/배열/객체로 오는 경우가 있어
+  // (s||'').replace(...) 만으로는 렌더링 중 TypeError로 화면이 멈출 수 있다 — 항상 문자열로 강제 변환
+  if(s===null||s===undefined) return '';
+  if(Array.isArray(s)) s=s.join(', ');
+  else if(typeof s!=='string') s=String(s);
+  return s.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 function rpn(r){ return (r.s||0)*(r.o||0)*(r.d||0); }
 function genId(prefix){ return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
@@ -1854,10 +1961,10 @@ const DRW_SYSTEM = `당신은 기계도면 분석 전문가이며, 영어/독일
           "label": "치수 설명 (예: 전체 길이, 구멍 직경, 피치원 직경)",
           "value": "치수값 (예: 120, φ8.5, M10)",
           "unit": "단위 (예: mm, inch)",
-          "tolerance": "공차 (예: ±0.1, +0.05/-0, H7, 없음)",
+          "tolerance": "공차 (예: ±0.1, +0.05/-0, H7, 없음). 치수가 사각형 박스(기준치수)이고 인근에 위치도 등 형상공차 프레임이 있으면 표제란 일반공차 대신 그 형상공차값을 적을 것 (아래 '일반공차보다 형상공차 우선' 규칙 참고)",
           "type": "SC 또는 CC 또는 일반",
           "note": "비고 — 도면에 영어/독일어/일본어 주석이 함께 붙어 있으면 '원문 (한글번역)' 형식으로 둘 다 표기 (없으면 빈 문자열)",
-          "location": {"page": 1, "x": 0, "y": 0, "w": 0, "h": 0}
+          "view": "이 치수가 표시된 도면 내 뷰/영역 이름 (예: 정면도, 평면도, 측면도, SECTION A-A, DETAIL C, PCB LAYOUT, ISO VIEW — 도면에 실제 적힌 뷰 제목을 그대로 옮겨 적음). 도면에 뷰 구분이 없거나 뷰가 하나뿐이면 빈 문자열"
         }
       ],
       "geometrics": [
@@ -1889,14 +1996,12 @@ const DRW_SYSTEM = `당신은 기계도면 분석 전문가이며, 영어/독일
 - 약어(SMI, FL, w/o dwg, oZ 등)는 도면 내 정의가 있으면 그 정의를 따르고, 없으면 통상적 의미를 한글로 부연 설명한다 (예: "w/o dwg / oZ" = "도면 없음/표제란 없음(Without Drawing / ohne Zeichnung)" 같은 식으로 풀어서 설명).
 - 표제란(title block)에 적힌 모든 텍스트(도면번호, 버전, 변경사항, 승인상태, 재질규격, 표면처리 코드 등)를 빠짐없이 확인하여 외국어가 있으면 translations 배열에 모두 정리한다.
 - dimensions는 도면에서 읽을 수 있는 주요 치수를 최대한 추출 (최소 5개 이상, 단 너무 많으면 핵심 치수 위주로 최대 20개까지)
-- dimensions의 location: 목표는 "이 치수의 value 필드에 적은 바로 그 숫자/기호가 도면 위에 실제로 인쇄되어 있는 지점"을 정확히 짚는 것이다. 대략적인 영역이나 관련 형상이 아니라, value와 글자 그대로 일치하는 그 숫자 텍스트 자체의 인쇄 위치를 찾는다.
-  - 절차: (1) 먼저 도면 전체에서 value(예: "30.8", "⌀0.4", "3.1")와 정확히 일치하는 숫자/기호 텍스트가 어디에 보이는지 눈으로 찾는다(같은 숫자가 여러 군데 있으면 label과 문맥이 맞는 것을 고른다). (2) 그 텍스트를 찾은 후에만 좌표를 계산한다. 텍스트를 찾지 못했으면 location을 null로 하고 절대 추측하지 않는다.
-  - 좌표계는 반드시 일반적인 화면/이미지 좌표계를 사용한다: 원점(x=0, y=0)은 도면 이미지의 "좌측 상단 모서리"이고, x는 오른쪽으로 갈수록 커지고(0=맨 왼쪽, 100=맨 오른쪽), y는 아래로 갈수록 커진다(0=맨 위, 100=맨 아래). PDF 문서 좌표계(원점이 좌측 하단, y가 위로 갈수록 커지는 방식)와 절대 혼동하지 말 것 — 위쪽에 있는 치수는 항상 y값이 작아야 하고(0에 가까움), 아래쪽에 있는 치수는 y값이 커야 한다(100에 가까움).
-  - x, y = 그 숫자 텍스트를 감싸는 사각형의 "좌측 상단" 꼭짓점 위치(%). w, h = 사각형의 폭/높이(%). 예: 도면 정중앙에 있는 작은 치수라면 대략 {"x":45,"y":45,"w":10,"h":8} 처럼 표기.
-  - 박스는 오직 그 숫자/기호 텍스트 글자들 + 바로 옆 여백만 감싸는 아주 타이트한 크기여야 한다(치수선·화살표·인출선이나 그 치수가 측정하는 형상·부품 전체를 감싸면 안 됨). w, h는 보통 2~6 정도의 작은 값이며 10을 넘는 경우는 거의 없어야 한다.
-  - 도면 테두리에 구역 참조 그리드(위/아래에 1,2,3...과 좌/우에 A,B,C... 같은 눈금)가 인쇄되어 있으면 이를 적극 활용한다: 그 숫자 텍스트가 세로로 몇 번째 구역(열, 예: 왼쪽에서 3번째 칸)과 가로로 몇 번째 구역(행, 예: 위에서 2번째 칸)에 있는지 그리드를 세어서 먼저 확인하고, 그 구역이 도면 전체에서 차지하는 대략적인 %범위와 최종 x,y 추정치가 서로 맞는지 반드시 교차 확인한다. 둘이 어긋나면 그리드로 센 구역 위치를 우선하여 x,y를 다시 조정한다(픽셀 감각보다 눈금을 세는 편이 훨씬 정확함).
-  - 도면(특히 PDF)이 여러 페이지로 되어 있으면, location.page에 그 치수가 실제로 표시된 페이지 번호(1부터 시작)를 반드시 정확히 기입한다. 단일 페이지 도면/이미지는 page를 1로 한다.
-  - 정확한 픽셀 단위가 아니어도 되지만, 위치(대략 도면의 어느 사분면/영역인지)와 박스 크기(타이트함)는 반드시 지켜야 하며, 자신 없으면 위치를 특정할 수 없는 경우에만 location을 null로 한다 — 틀린 위치를 추정해서 넣는 것보다 null이 낫다.
+- dimensions 항목마다 다음 필드를 모두 채우고, 값이 없다면 빈 문자열 또는 표준값으로 유지한다: label, value, unit, tolerance, note, view, type, meaning, checkPoint, criticality.
+- meaning: 해당 치수가 도면에서 무엇을 의미하는지 한 줄로 설명한다 (예: "부품 전체 길이", "리브 높이", "구멍 중심 간격", "설치면 간격").
+- checkPoint: 검토 시 특히 확인해야 할 포인트를 한 줄로 적는다 (예: "조립 시 간섭 여부 확인", "가공보다 공차 기준 우선", "인접 홀과의 위치 관계 확인").
+- criticality: 중요도는 "필수" / "중요" / "참고" 중 하나로 분류한다. SC/CC 또는 공차가 영향 큰 항목은 "필수" 우선.
+- dimensions의 view: 도면을 잘 모르는 사람도 그 치수가 도면의 어느 부분을 말하는 건지 찾을 수 있도록, 이 치수가 실제로 표시되어 있는 뷰/영역의 제목을 기입한다. 도면에 인쇄된 뷰 제목(예: "정면도", "SECTION A-A", "DETAIL C", "PCB LAYOUT", "ISO VIEW", "평면도")을 그대로 옮겨 적을 것 — 직접 만들어내거나 의역하지 말 것. 여러 뷰가 겹쳐 있어 어디 표시된 건지 확신이 안 서면 빈 문자열로 둔다(틀린 뷰를 적는 것보다 비워두는 것이 낫다). 도면 자체에 별도 뷰 구분이 없는 단일 뷰 도면이면 빈 문자열로 둔다.
+- 중요 규칙 — 일반공차보다 형상공차(GD&T)가 우선한다: 치수값이 사각형 박스(□)로 둘러싸여 있으면 이는 "기준(참고)치수(basic dimension)"이며 그 자체는 공차가 없다 — 그 치수의 실제 공차는 표제란의 일반공차(GENERAL TOLERANCE 표)가 아니라, 인근에 표시된 위치도(⌖/position)·진직도·평면도 등 형상공차 피처 컨트롤 프레임(예: ⌀0.4, M/L/S 수식기호 포함)이 결정한다. 어떤 치수 옆/인근에 형상공차 프레임이 연결되어 있으면(특히 위치도 공차로 여러 개의 구멍·핀 좌표를 함께 규제하는 경우) 그 치수들의 tolerance 필드에는 절대 일반공차값을 넣지 말고 "위치도 ⌀0.4 적용 (일반공차 미적용, 기준치수)"처럼 실제로 적용되는 형상공차를 명시하고, note에도 이를 분명히 밝힌다. 표제란의 일반공차 표는 형상공차나 개별 공차가 명시되지 않은 순수 일반 치수에만 적용한다. 해당 형상공차는 geometrics 배열에도 빠짐없이 등록한다.
 - SC(안전특성): 안전·법규 관련 / CC(중요특성): 기능·조립 관련
 - 치수가 명확히 보이지 않으면 "판독불가"로 표기
 - 도면이 없거나 분석 불가능한 경우에도 JSON 형식은 유지
@@ -1921,8 +2026,8 @@ async function startDrawingAnalysis(){
   if(!projDrawings.length){ toast('도면을 먼저 업로드하세요','err'); return; }
   if(!getKey()){ toast('API 키를 먼저 입력하세요','err'); return; }
   const n=projDrawings.length;
-  const ESTIMATED_TOKENS=Math.max(5000,n*5000); // 진행률 계산용 예상 출력 토큰 (실측 아님, 체감용 추정치)
-  const maxOut=Math.max(16000,Math.min(64000,n*16000));
+  const ESTIMATED_TOKENS=Math.max(8000,n*8000); // 진행률 계산용 예상 출력 토큰 (thinking 포함, 실측 아님, 체감용 추정치)
+  const maxOut=Math.max(24000,Math.min(80000,n*20000));
   // 버튼을 로딩 상태(progress bar)로
   const row=document.getElementById('drwAnalyzeRow');
   const setBtnPct=(pct)=>{
@@ -1938,9 +2043,17 @@ async function startDrawingAnalysis(){
     </div>`;
   };
   // 모달이 열려 있다면 모달 내부에도 진행률 표시
+  // renderDrwModal()이 한 번이라도 실행되면(재분석 시 결과 화면 등으로 교체됨)
+  // 원래 정적 마크업의 #drwLoadingBox가 사라지므로, 없으면 새로 만들어 넣는다
+  // (그래야 재분석 시에도 진행률이 계속 표시됨)
   const setModalPct=(pct)=>{
-    const box=document.getElementById('drwLoadingBox');
-    if(!box) return;
+    const modalBody=document.getElementById('drwModalBody');
+    if(!modalBody) return;
+    let box=document.getElementById('drwLoadingBox');
+    if(!box){
+      modalBody.innerHTML='<div class="loading-box" id="drwLoadingBox"></div>';
+      box=document.getElementById('drwLoadingBox');
+    }
     box.innerHTML=`<div class="spinner"></div>
       <div class="drw-loading-pct">${pct}%</div>
       <div class="drw-loading-bar"><div class="drw-loading-fill" style="width:${pct}%"></div></div>
@@ -1956,12 +2069,13 @@ async function startDrawingAnalysis(){
   try{
     const content=[];
     projDrawings.forEach((d,i)=>{
-      const isImg=d.type&&d.type.startsWith('image/');
-      const isPdf=d.type==='application/pdf';
+      const mime=d.type||inferDrawingMime({name:d.name||'',type:d.type||''});
+      const isImg=mime&&mime.startsWith('image/');
+      const isPdf=mime==='application/pdf';
       if(!isImg&&!isPdf) return;
       const roleTxt=d.role==='assy'?'ASSY(조립도)':'하위 자재(구성부품)';
       content.push({type:'text',text:`[도면 ${i+1}] 역할: ${roleTxt}${d.label?`, 도면번호/라벨: ${d.label}`:''}${d.name?`, 파일명: ${d.name}`:''}`});
-      content.push({type:isPdf?'document':'image',source:{type:'base64',media_type:d.type,data:d.data}});
+      content.push({type:isPdf?'document':'image',source:{type:'base64',media_type:mime,data:d.data}});
     });
     const hintLine = projPartHint && projPartHint.trim()
       ? `\n\n사용자 제공 정보(참고): 이 부품/어셈블리는 "${projPartHint.trim()}"에 들어갑니다. 이 정보를 partIdentification에 최우선으로 반영해 주세요.`
@@ -1973,22 +2087,24 @@ async function startDrawingAnalysis(){
       ? `총 ${n}장의 도면이 첨부되었습니다(순서대로 도면 1~${n}). 각 도면을 독립적으로 정확히 분석하고, drawings 배열의 순서를 첨부 순서와 반드시 일치시켜 주세요. 또한 ASSY 도면과 하위 자재 도면 간의 조립관계를 assemblyNotes에 요약해 주세요.`
       : '이 도면을 분석해 주세요.';
     content.push({type:'text',text:`${multiLine} 주요 치수, 공차, 재질, 형상공차, 주기사항을 추출해 주세요. 도면에 영어, 독일어, 일본어로 적힌 모든 텍스트(주기사항, 표제란, 약어, 기호 설명 포함)를 빠짐없이 정확히 읽고, 반드시 한글 번역을 함께 제공해 주세요. translations 배열에 원문과 한글 번역을 모두 정리해 주세요. 치수가 L***처럼 변수로 표기되어 있으면 도면 내 사양 테이블을 찾아 실제 값을 매칭해 주세요.`+hintLine+globalRuleLine});
-    const res=await fetch(API_URL,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':getKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:maxOut,system:DRW_SYSTEM,messages:[{role:'user',content}],stream:true}),
-      signal:_drwAbortCtrl.signal
-    });
+    const model=getDrawingAnalysisModel();
+    const res=await fetchClaudeMessages(
+      {model,max_tokens:maxOut,thinking:{type:'adaptive',display:'summarized'},system:DRW_SYSTEM,messages:[{role:'user',content}],stream:true},
+      _drwAbortCtrl.signal
+    );
     if(!res.ok){
       let detail='';
       try{ const errBody=await res.json(); detail=errBody?.error?.message?(' - '+errBody.error.message):''; }catch(_){}
       throw new Error(`HTTP ${res.status}${detail}`);
     }
     // ─ SSE 스트림 직접 파싱하여 누적 텍스트 길이로 진행률(%) 추정 ─
+    // (thinking 단계에서도 델타가 오므로 thinking+text 길이를 합산해야
+    //  "생각 중"인 동안 진행률이 멈춰있는 것처럼 보이지 않는다)
     const reader=res.body.getReader();
     const decoder=new TextDecoder();
     let buf='';
     let text='';
+    let thinkingLen=0;
     let wasTruncated=false;
     let outputTokens=0;
     while(true){
@@ -2006,7 +2122,12 @@ async function startDrawingAnalysis(){
         if(evt.type==='content_block_delta'&&evt.delta?.text){
           text+=evt.delta.text;
           // 대략 4글자=1토큰으로 추정해 진행률 계산
-          outputTokens=Math.round(text.length/4);
+          outputTokens=Math.round((text.length+thinkingLen)/4);
+          const pct=Math.min(96,Math.round((outputTokens/ESTIMATED_TOKENS)*100));
+          setBtnPct(pct); setModalPct(pct);
+        }else if(evt.type==='content_block_delta'&&evt.delta?.thinking){
+          thinkingLen+=evt.delta.thinking.length;
+          outputTokens=Math.round((text.length+thinkingLen)/4);
           const pct=Math.min(96,Math.round((outputTokens/ESTIMATED_TOKENS)*100));
           setBtnPct(pct); setModalPct(pct);
         }else if(evt.type==='message_delta'&&evt.delta?.stop_reason==='max_tokens'){
@@ -2042,12 +2163,27 @@ async function startDrawingAnalysis(){
     idbSet('proj_assembly_notes',projAssemblyNotes).catch(()=>{});
     renderDrawingList();
     toast(`도면 분석 완료 (${results.length}/${n})`,'ok');
-    if(_activeDrwId&&getDrawing(_activeDrwId)) openDrwModal(_activeDrwId); // 자동으로 결과 열기
-    else if(projDrawings.length) openDrwModal(projDrawings[0].id);
+    // 결과 화면을 그리다가 예외가 나더라도(예상 밖 데이터 형태) 이미 완료된 분석이
+    // "실패"로 잘못 표시되지 않도록 별도로 감싼다 — 결과는 이미 저장됨
+    try{
+      if(_activeDrwId&&getDrawing(_activeDrwId)) openDrwModal(_activeDrwId); // 자동으로 결과 열기
+      else if(projDrawings.length) openDrwModal(projDrawings[0].id);
+    }catch(renderErr){
+      console.error('도면 분석 결과 렌더링 실패:',renderErr);
+      toast('분석은 완료되었지만 결과 화면 표시 중 오류가 발생했습니다. 도면을 다시 열어보세요','err');
+      // 렌더링이 중간에 실패해 모달이 "100%" 로딩 화면에 그대로 멈춰있지 않도록
+      // 모달 내용을 명시적으로 오류 안내로 교체 (닫기/원본 보기/재분석 버튼은 계속 사용 가능)
+      const body=document.getElementById('drwModalBody');
+      // 원인 파악을 위해 실제 에러 메시지를 화면에도 노출 (F12 콘솔 없이도 확인 가능)
+      if(body) body.innerHTML=`<div class="loading-box"><i class="ti ti-alert-triangle" style="font-size:32px;color:var(--danger);display:block;margin-bottom:8px"></i><p style="font-size:12px;color:var(--text2)">분석은 완료되었지만 결과 화면을 표시하는 중 오류가 발생했습니다.<br>아래 "닫기" 후 도면을 다시 열어보세요.</p><p style="font-size:10.5px;color:var(--text3);margin-top:10px;font-family:monospace;word-break:break-all">${esc(renderErr && (renderErr.message||String(renderErr)))}</p></div>`;
+    }
   }catch(e){
     if(e.name==='AbortError') toast('도면 분석을 중지했습니다','err');
     else toast('도면 분석 실패: '+e.message,'err');
     renderDrawingList();
+    // 실패 시 모달이 "진행률 화면"에 그대로 멈춰있지 않도록 현재 상태로 다시 그림
+    // (renderDrwModal 자체가 실패하더라도 여기서 또 예외가 나면 안 되므로 방어적으로 감쌈)
+    try{ if(document.getElementById('drwModal')?.classList.contains('open')) renderDrwModal(); }catch(_){}
   }finally{
     _drwAbortCtrl=null;
     if(hintInput){ hintInput.disabled=false; hintInput.title='AI 도면/공정 분석 시 참고 정보로 함께 활용됩니다'; }
@@ -2064,13 +2200,29 @@ function openDrwModal(id){
 }
 function closeDrwModal(){ document.getElementById('drwModal').classList.remove('open'); }
 function reAnalyzeDrawing(){ closeDrwModal(); startDrawingAnalysis(); }
-
+function setDimViewMode(mode){
+  _drwDimViewMode=mode;
+  if(_activeDrwId) renderDrwModal();
+}
+function getVisibleDims(dimensions){
+  const list=asObjArr(dimensions).slice();
+  if(!_drwDimViewMode || _drwDimViewMode==='priority'){
+    return list.sort((a,b)=>{
+      const prio=a=>a.type==='SC'||a.type==='CC'?1:0;
+      const sec=a=>a.type==='SC'?2:a.type==='CC'?1:0;
+      return prio(b)-prio(a) || sec(b)-sec(a);
+    });
+  }
+  if(_drwDimViewMode==='critical'){
+    const crit=list.filter(d=>d.type==='SC'||d.type==='CC');
+    return crit.length ? crit : list;
+  }
+  return list;
+}
 function renderDrwModal(){
   const body=document.getElementById('drwModalBody');
   const rec=getDrawing(_activeDrwId);
-  _dimHighlightTarget=null; // 도면 전환/재렌더 시 이전 하이라이트 초기화
-  _dimLocatePickIndex=null; // 도면 전환 시 진행 중이던 위치 지정 모드도 취소
-  _dimPvScale=1; _dimPvOx=0; _dimPvOy=0; // 확대/이동 상태 초기화
+  _dimPvScale=1; _dimPvOx=0; _dimPvOy=0; // 도면 전환/재렌더 시 확대/이동 상태 초기화
   const switcherHtml=projDrawings.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${projDrawings.map(x=>`
     <button class="btn${x.id===_activeDrwId?' primary':''}" style="font-size:11px;padding:5px 9px" onclick="openDrwModal('${x.id}')">
       ${x.role==='assy'?'ASSY':'하위자재'}${x.label?' · '+esc(x.label):''}${!x.info?' (분석전)':''}
@@ -2083,7 +2235,7 @@ function renderDrwModal(){
   const isImg=rec.type&&rec.type.startsWith('image/');
   const isPdf=rec.type==='application/pdf';
   const previewHtml=isImg&&rec.dataUrl
-    ?`<img id="drwPreviewEl" src="${rec.dataUrl}" alt="도면" style="max-width:100%;max-height:600px;object-fit:contain;border-radius:var(--r)" onload="applyDimHighlight()">`
+    ?`<img id="drwPreviewEl" src="${rec.dataUrl}" alt="도면" style="max-width:100%;max-height:600px;object-fit:contain;border-radius:var(--r)">`
     :isPdf&&rec.data
     ?`<div id="drwPdfPreviewWrap" style="width:100%">
         <canvas id="drwPreviewEl" style="max-width:100%;max-height:600px;border-radius:var(--r);display:none;margin:0 auto"></canvas>
@@ -2096,27 +2248,65 @@ function renderDrwModal(){
     ?`<span class="badge char-sc" style="font-size:9px;margin-left:4px">SC</span>`
     :t==='CC'?`<span class="badge char-cc" style="font-size:9px;margin-left:4px">CC</span>`:'';
 
-  const canLocate=isImg||(isPdf&&rec.data);
-  const hasLoc=dim=>canLocate&&dim.location&&!isNaN(parseLocNum(dim.location.x))&&!isNaN(parseLocNum(dim.location.y));
-  const dimCards=(d.dimensions||[]).map((dim,i)=>`
-    <div class="dim-card ${typeClass(dim.type)}${hasLoc(dim)?' locatable':''}" ${hasLoc(dim)?`onclick="highlightDim(${i})" title="클릭하면 도면에서 위치를 표시합니다"`:''}>
-      <div class="dim-label">${esc(dim.label)}${typeBadge(dim.type)}${hasLoc(dim)?'<i class="ti ti-focus-2 dim-locate-ic"></i>':''}${canLocate?`<i class="ti ti-pencil dim-locate-edit-ic" title="도면에서 정확한 위치 직접 지정/수정" onclick="event.stopPropagation();startDimLocatePick(${i})"></i>`:''}</div>
-      <div class="dim-value">${esc(dim.value)}${dim.unit&&dim.unit!=='없음'?' <span style="font-size:11px;font-weight:400;color:var(--text3)">'+esc(dim.unit)+'</span>':''}</div>
-      ${dim.tolerance&&dim.tolerance!=='없음'?`<div class="dim-tol"><i class="ti ti-arrows-horizontal" style="font-size:10px"></i> ${esc(dim.tolerance)}</div>`:''}
-      ${dim.note?`<div class="dim-note">${esc(dim.note)}</div>`:''}
+  const summaryText=d.analysisSummary||d.summary||'';
+  const summaryHtml=summaryText?`<div class="drw-section">
+      <div class="drw-section-title"><i class="ti ti-notes"></i>분석 요약</div>
+      <p style="font-size:12px;color:var(--text2);line-height:1.7;margin:0">${esc(summaryText)}</p>
+    </div>`:'';
+
+  // AI 응답의 배열 필드는 형태가 예상과 다를 수 있어(단일 객체/문자열/null 등) 항상 asArr/asObjArr로 정규화
+  const dimsArr=asObjArr(d.dimensions);
+  const visibleDims=getVisibleDims(dimsArr);
+  const dimsPriority=visibleDims.slice().sort((a,b)=>{
+    const prio=a=>a.type==='SC'||a.type==='CC'?1:0;
+    return prio(b)-prio(a);
+  });
+  const dimSummary={
+    total:dimsArr.length,
+    sc:dimsArr.filter(x=>x.type==='SC').length,
+    cc:dimsArr.filter(x=>x.type==='CC').length,
+    core:Math.min(dimsArr.filter(x=>x.type!=='SC'&&x.type!=='CC').length,5)
+  };
+  // 라벨은 더 이상 JS 단에서 잘라내지 않고 그대로 넘긴다 — 평소엔 CSS로 말줄임(...) 처리하고,
+  // 마우스오버/포커스 시 CSS에서 전체 텍스트가 잘리지 않게 펼쳐 보여준다 (title 속성도 함께 제공)
+  const dimOverlayItems=dimsPriority.slice(0,5).map((dim,index)=>{
+    const label=String(dim.label||`치수 ${index+1}`).replace(/\s+/g,' ');
+    const labelAttr=esc(label).replace(/"/g,'&quot;');
+    const valueText=dim.value||'—';
+    const unitText=dim.unit&&dim.unit!=='없음'?dim.unit:'';
+    const chipClass=dim.type==='SC'?'sc':dim.type==='CC'?'cc':'';
+    const originalIndex=dimsArr.findIndex(item => item===dim);
+    return `<div class="drw-dim-overlay-chip ${chipClass}" tabindex="0" onclick="focusDimCard('${rec.id}',${originalIndex})">
+      <span class="drw-dim-overlay-name" title="${labelAttr}">${esc(label)}</span>
+      <span class="drw-dim-overlay-value">${esc(valueText)}${unitText?`<span class="drw-dim-overlay-unit">${esc(unitText)}</span>`:''}</span>
+    </div>`;
+  }).join('');
+
+  const dimCards=dimsArr.map((dim,i)=>`
+    <div class="dim-card ${typeClass(dim.type)}" data-dim-index="${i}" data-drw-id="${rec.id}" onclick="focusDimCard('${rec.id}',${i})">
+      <div class="dim-label"><span class="dim-editable" contenteditable="true" onblur="editDimField('${rec.id}',${i},'label',this)" title="클릭하여 수정">${esc(dim.label)}</span>${typeBadge(dim.type)}</div>
+      ${dim.view?`<div class="dim-view"><i class="ti ti-frame" style="font-size:10px"></i> <span class="dim-editable" contenteditable="true" onblur="editDimField('${rec.id}',${i},'view',this)" title="클릭하여 수정">${esc(dim.view)}</span></div>`:''}
+      <div class="dim-value"><span class="dim-editable" contenteditable="true" onblur="editDimField('${rec.id}',${i},'value',this)" title="클릭하여 수정">${esc(dim.value)}</span>${dim.unit&&dim.unit!=='없음'?` <span class="dim-editable" contenteditable="true" onblur="editDimField('${rec.id}',${i},'unit',this)" style="font-size:11px;font-weight:400;color:var(--text3)" title="클릭하여 수정">${esc(dim.unit)}</span>`:''}</div>
+      ${dim.tolerance&&dim.tolerance!=='없음'?`<div class="dim-tol"><i class="ti ti-arrows-horizontal" style="font-size:10px"></i> <span class="dim-editable" contenteditable="true" onblur="editDimField('${rec.id}',${i},'tolerance',this)" title="클릭하여 수정">${esc(dim.tolerance)}</span></div>`:''}
+      ${dim.note?`<div class="dim-note"><span class="dim-editable" contenteditable="true" onblur="editDimField('${rec.id}',${i},'note',this)" title="클릭하여 수정">${esc(dim.note)}</span></div>`:''}
+      <div class="dim-meta-stack">
+        ${dim.criticality?`<span class="dim-meta-chip ${String(dim.criticality).includes('필수')?'danger':String(dim.criticality).includes('중요')?'warn':'primary'}">${esc(dim.criticality)}</span>`:''}
+        ${dim.meaning?`<span class="dim-meta-chip primary">의미: ${esc(dim.meaning)}</span>`:''}
+        ${dim.checkPoint?`<span class="dim-meta-chip warn">검토: ${esc(dim.checkPoint)}</span>`:''}
+      </div>
     </div>`).join('');
 
-  const gdtRows=(d.geometrics||[]).map(g=>`
+  const gdtRows=asObjArr(d.geometrics).map(g=>`
     <tr>
       <td>${esc(g.symbol)}</td>
       <td style="font-family:monospace;font-weight:600">${esc(g.value)}</td>
       <td style="color:var(--text2);font-weight:500">${esc(g.datum)||'-'}</td>
     </tr>`).join('');
 
-  const scList=(d.sc_items||[]);
-  const noteList=(d.notes||[]);
-  const transList=(d.translations||[]);
-  const pid=d.partIdentification||null;
+  const scList=asArr(d.sc_items);
+  const noteList=asArr(d.notes);
+  const transList=asObjArr(d.translations);
+  const pid=(d.partIdentification&&typeof d.partIdentification==='object')?d.partIdentification:null;
 
   const confColor=c=>c==='높음'?'var(--success)':c==='중간'?'var(--warn)':'var(--text3)';
   const userHintNote=projPartHint&&projPartHint.trim()
@@ -2139,7 +2329,24 @@ function renderDrwModal(){
 
   body.innerHTML=`
     ${switcherHtml}
-    <div class="drw-preview" id="drwPreviewBox" onmousedown="handlePreviewMouseDown(event)" onwheel="handlePreviewWheel(event)">${previewHtml}<div id="drwHighlight" class="drw-highlight"></div><div id="drwDragBox" class="drw-dragbox"></div><div id="drwPdfPageIndicator" class="drw-pdf-page-indicator" style="display:none"></div><div id="drwPickHint" class="drw-pick-hint" style="display:none">드래그해서 정확한 위치 지정 (Esc: 취소)</div><div class="drw-pv-zoom" onmousedown="event.stopPropagation()"><button type="button" onclick="zoomPreview(-0.3)" title="축소"><i class="ti ti-zoom-out"></i></button><button type="button" class="drw-pv-zoom-label" id="drwPvZoomLabel" onclick="resetPreviewZoom()" title="원래 크기로">100%</button><button type="button" onclick="zoomPreview(0.3)" title="확대"><i class="ti ti-zoom-in"></i></button></div></div>
+    <div class="drw-compare-toolbar">
+      <button class="drw-compare-tab ${_drwDimViewMode==='priority'?'active':''}" onclick="setDimViewMode('priority')">핵심치수</button>
+      <button class="drw-compare-tab ${_drwDimViewMode==='critical'?'active':''}" onclick="setDimViewMode('critical')">SC/CC 우선</button>
+      <button class="drw-compare-tab ${_drwDimViewMode==='all'?'active':''}" onclick="setDimViewMode('all')">전체 보기</button>
+    </div>
+    <div class="drw-dim-legend">
+      <span class="drw-dim-legend-item"><span class="drw-dim-legend-swatch primary"></span>핵심 ${dimSummary.core}</span>
+      <span class="drw-dim-legend-item"><span class="drw-dim-legend-swatch sc"></span>SC ${dimSummary.sc}</span>
+      <span class="drw-dim-legend-item"><span class="drw-dim-legend-swatch cc"></span>CC ${dimSummary.cc}</span>
+    </div>
+    <div class="drw-preview" id="drwPreviewBox" onwheel="handlePreviewWheel(event)" onmousedown="handlePreviewMouseDown(event)">
+      ${dimOverlayItems?`<div class="drw-dim-overlay">
+        <div class="drw-dim-overlay-header"><span>${_drwDimViewMode==='critical'?'SC/CC 우선':_drwDimViewMode==='all'?'전체치수':'핵심치수'}</span><span>${dimsPriority.length}개</span></div>
+        ${dimOverlayItems}
+      </div>`:''}
+      ${previewHtml}
+      <div class="drw-pv-zoom" onmousedown="event.stopPropagation()"><button type="button" onclick="zoomPreview(-0.5)" title="축소"><i class="ti ti-zoom-out"></i></button><button type="button" class="drw-pv-zoom-label" id="drwPvZoomLabel" onclick="resetPreviewZoom()" title="원래 크기로">100%</button><button type="button" onclick="zoomPreview(0.5)" title="확대"><i class="ti ti-zoom-in"></i></button></div>
+    </div>
 
     <div class="drw-meta-row">
       <span class="badge${rec.role==='assy'?' badge-ai':''}" style="font-size:9px">${rec.role==='assy'?'ASSY':'하위자재'}</span>
@@ -2151,6 +2358,7 @@ function renderDrwModal(){
     </div>
 
     ${partIdHtml}
+    ${summaryHtml}
 
     ${dimCards?`<div class="drw-section">
       <div class="drw-section-title"><i class="ti ti-ruler"></i>주요 치수</div>
@@ -2194,232 +2402,73 @@ function renderDrwModal(){
       <p style="font-size:12px;color:var(--text2);line-height:1.7">${esc(projAssemblyNotes)}</p>
     </div>`:''}
   `;
-  if(isPdf&&rec.data) renderPdfPreview(rec,1);
+  if(isPdf&&rec.data) renderPdfPreview(rec);
 }
 
-// AI가 location.x/y/w/h를 "35" 대신 "35%" 같은 문자열로 줄 수 있어 숫자 외 문자를 제거하고 파싱
-function parseLocNum(v){
-  if(v==null) return NaN;
-  if(typeof v==='number') return v;
-  return parseFloat(String(v).replace(/[^0-9.\-]/g,''));
-}
-// 치수 카드 클릭 → 미리보기 이미지 위에 해당 치수의 대략적 위치를 사각형으로 표시
-// (도면을 잘 모르는 사람도 어느 부분을 말하는 건지 한눈에 찾을 수 있도록)
-function highlightDim(i){
-  const rec=getDrawing(_activeDrwId);
-  const dim=rec&&rec.info&&rec.info.dimensions&&rec.info.dimensions[i];
-  if(!dim||!dim.location) return;
-  _dimHighlightTarget=dim.location;
-  _dimShouldFrame=true; // 이 치수가 화면에 잘 보이도록 자동으로 확대/이동
-  const targetPage=Math.max(1,Math.round(parseLocNum(dim.location.page))||1);
-  if(rec.type==='application/pdf'&&targetPage!==_drwPdfCurrentPage){
-    renderPdfPreview(rec,targetPage); // 다른 페이지의 치수면 해당 페이지를 다시 렌더링(완료 후 내부에서 하이라이트 적용)
-  }else{
-    applyDimHighlight();
-  }
-  document.getElementById('drwPreviewBox')?.scrollIntoView({behavior:'smooth',block:'center'});
-}
-
-// AI 추정 위치가 부정확할 때, 사용자가 도면을 직접 클릭해 그 치수의 정확한 위치를 지정/보정
-function startDimLocatePick(i){
-  const rec=getDrawing(_activeDrwId);
-  const dim=rec&&rec.info&&rec.info.dimensions&&rec.info.dimensions[i];
-  const canPreviewIt=rec&&((rec.type&&rec.type.startsWith('image/')&&rec.dataUrl)||(rec.type==='application/pdf'&&rec.data));
-  if(!dim||!canPreviewIt){ toast('이 도면은 미리보기가 없어 위치를 지정할 수 없습니다','err'); return; }
-  _dimLocatePickIndex=i;
-  if(dim.location) highlightDim(i); // 기존 위치가 있으면 우선 보여줌(어느 페이지인지 등 맞춰줌)
-  const box=document.getElementById('drwPreviewBox');
-  box?.classList.add('picking');
-  const hint=document.getElementById('drwPickHint');
-  if(hint) hint.style.display='block';
-  box?.scrollIntoView({behavior:'smooth',block:'center'});
-  toast(`"${dim.label||'이 치수'}" — 도면에서 정확한 위치를 클릭하세요`,'ok');
-}
-function cancelDimLocatePick(){
-  _dimDrawing=false; _dimDrawStartXY=null;
-  const db=document.getElementById('drwDragBox');
-  if(db) db.style.display='none';
-  if(_dimLocatePickIndex==null) return;
-  _dimLocatePickIndex=null;
-  document.getElementById('drwPreviewBox')?.classList.remove('picking');
-  const hint=document.getElementById('drwPickHint');
-  if(hint) hint.style.display='none';
-}
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&_dimLocatePickIndex!=null) cancelDimLocatePick(); });
-
-/* ─ 미리보기 확대/이동(줌·팬) ─ */
-// el(이미지/PDF 캔버스)의 스케일 적용 전 기본 레이아웃 크기를 기준으로, 중앙 기준 오프셋을 계산해 transform 적용
-function applyPreviewTransform(){
+/* ─ 미리보기 확대/축소 + 이동(팬) ─ */
+// el은 부모(.drw-preview, flex center)에 의해 이미 중앙 정렬되어 있으므로,
+// transform-origin을 중앙으로 두고 그 위에 이동(pan)만 더하고 배율만 곱하면 된다 (별도 위치 계산 불필요)
+function applyPreviewZoom(){
   const el=document.getElementById('drwPreviewEl');
-  const box=document.getElementById('drwPreviewBox');
-  if(!el||!box) return;
-  el.style.transformOrigin='0 0';
-  const ww=box.clientWidth, wh=box.clientHeight;
-  const bw=el.offsetWidth, bh=el.offsetHeight; // transform 영향을 받지 않는 레이아웃 상 기본 크기
-  if(!bw||!bh) return;
-  const cx=ww/2+_dimPvOx, cy=wh/2+_dimPvOy;
-  const ox=cx-bw*_dimPvScale/2, oy=cy-bh*_dimPvScale/2;
-  el.style.transform=`translate(${ox}px,${oy}px) scale(${_dimPvScale})`;
+  if(!el) return;
+  el.style.transformOrigin='center center';
+  el.style.transform=`translate(${_dimPvOx}px,${_dimPvOy}px) scale(${_dimPvScale})`;
   const label=document.getElementById('drwPvZoomLabel');
   if(label) label.textContent=Math.round(_dimPvScale*100)+'%';
-  applyDimHighlight(); // 확대/이동할 때마다 하이라이트 박스도 같이 따라가도록 위치 재계산
 }
 function zoomPreview(delta){
   const prev=_dimPvScale;
-  _dimPvScale=Math.min(Math.max(prev+delta,0.5),8);
+  _dimPvScale=Math.min(Math.max(prev+delta,1),6);
   _dimPvOx*=_dimPvScale/prev; _dimPvOy*=_dimPvScale/prev;
-  applyPreviewTransform();
+  applyPreviewZoom();
   scheduleMaybeUpscalePdf();
 }
 function resetPreviewZoom(){
   _dimPvScale=1; _dimPvOx=0; _dimPvOy=0;
-  applyPreviewTransform();
+  applyPreviewZoom();
+}
+function focusDimCard(drwId,index){
+  const cards=document.querySelectorAll('.dim-card[data-drw-id="'+drwId+'"]');
+  cards.forEach(card=>card.classList.remove('dim-focused'));
+  const target=document.querySelector('.dim-card[data-drw-id="'+drwId+'"][data-dim-index="'+index+'"]');
+  if(!target) return;
+  target.classList.add('dim-focused');
+  target.scrollIntoView({behavior:'smooth',block:'center'});
+  setTimeout(()=>{ target.classList.remove('dim-focused'); },1800);
 }
 function handlePreviewWheel(ev){
   const box=document.getElementById('drwPreviewBox');
-  const el=document.getElementById('drwPreviewEl');
-  if(!box||!el) return;
+  if(!box) return;
   ev.preventDefault();
   const rect=box.getBoundingClientRect();
   const mx=ev.clientX-rect.left-rect.width/2;
   const my=ev.clientY-rect.top-rect.height/2;
   const prev=_dimPvScale;
-  const delta=ev.deltaY<0?0.18:-0.18;
-  _dimPvScale=Math.min(Math.max(prev+delta,0.5),8);
+  _dimPvScale=Math.min(Math.max(prev+(ev.deltaY<0?0.3:-0.3),1),6);
   _dimPvOx=mx-(_dimPvScale/prev)*(mx-_dimPvOx);
   _dimPvOy=my-(_dimPvScale/prev)*(my-_dimPvOy);
-  applyPreviewTransform();
+  applyPreviewZoom();
   scheduleMaybeUpscalePdf();
 }
-// 특정 위치(loc, % 단위)가 화면에 적당히 크게 보이도록 자동으로 확대하고 중앙에 오도록 이동
-function frameDimTarget(loc){
-  const el=document.getElementById('drwPreviewEl');
-  if(!el) return;
-  const bw=el.offsetWidth, bh=el.offsetHeight;
-  if(!bw||!bh) return;
-  const x=Math.max(0,Math.min(100,parseLocNum(loc.x)||0));
-  const y=Math.max(0,Math.min(100,parseLocNum(loc.y)||0));
-  const w=Math.max(1,parseLocNum(loc.w)||8);
-  const h=Math.max(1,parseLocNum(loc.h)||8);
-  _dimPvScale=Math.min(6,Math.max(1.5,22/Math.max(w,h))); // 대상 박스가 화면 폭의 대략 22% 정도를 차지하도록 확대
-  const centerXBase=((x+w/2)/100)*bw-bw/2; // 이미지 중심 대비 대상 중심의 오프셋(px, scale=1 기준)
-  const centerYBase=((y+h/2)/100)*bh-bh/2;
-  _dimPvOx=-centerXBase*_dimPvScale;
-  _dimPvOy=-centerYBase*_dimPvScale;
-  applyPreviewTransform();
-  scheduleMaybeUpscalePdf();
-}
-
-/* ─ 미리보기 드래그: 위치 지정 모드면 사각형 그리기, 아니면 화면 이동(팬) ─ */
 function handlePreviewMouseDown(ev){
   if(ev.button!==0) return;
-  if(_dimLocatePickIndex!=null){
-    _dimDrawing=true;
-    _dimDrawStartXY={x:ev.clientX,y:ev.clientY};
-    updateDragBox(ev.clientX,ev.clientY,ev.clientX,ev.clientY);
-    ev.preventDefault();
-  }else{
-    _dimPvDragging=true; _dimPvLx=ev.clientX; _dimPvLy=ev.clientY;
-    document.getElementById('drwPreviewBox')?.classList.add('panning');
-    ev.preventDefault();
-  }
+  _dimPvDragging=true; _dimPvLx=ev.clientX; _dimPvLy=ev.clientY;
+  document.getElementById('drwPreviewBox')?.classList.add('panning');
+  ev.preventDefault();
 }
 document.addEventListener('mousemove',(ev)=>{
-  if(_dimDrawing&&_dimDrawStartXY){
-    updateDragBox(_dimDrawStartXY.x,_dimDrawStartXY.y,ev.clientX,ev.clientY);
-  }else if(_dimPvDragging){
-    _dimPvOx+=ev.clientX-_dimPvLx; _dimPvOy+=ev.clientY-_dimPvLy;
-    _dimPvLx=ev.clientX; _dimPvLy=ev.clientY;
-    applyPreviewTransform();
-  }
+  if(!_dimPvDragging) return;
+  _dimPvOx+=ev.clientX-_dimPvLx; _dimPvOy+=ev.clientY-_dimPvLy;
+  _dimPvLx=ev.clientX; _dimPvLy=ev.clientY;
+  applyPreviewZoom();
 });
-document.addEventListener('mouseup',(ev)=>{
-  if(_dimDrawing) finishDimDraw(ev.clientX,ev.clientY);
-  if(_dimPvDragging){
-    _dimPvDragging=false;
-    document.getElementById('drwPreviewBox')?.classList.remove('panning');
-  }
+document.addEventListener('mouseup',()=>{
+  if(!_dimPvDragging) return;
+  _dimPvDragging=false;
+  document.getElementById('drwPreviewBox')?.classList.remove('panning');
 });
-function updateDragBox(x1,y1,x2,y2){
-  const box=document.getElementById('drwPreviewBox');
-  const db=document.getElementById('drwDragBox');
-  if(!box||!db) return;
-  const rect=box.getBoundingClientRect();
-  const left=Math.min(x1,x2)-rect.left, top=Math.min(y1,y2)-rect.top;
-  db.style.cssText=`left:${left}px;top:${top}px;width:${Math.abs(x2-x1)}px;height:${Math.abs(y2-y1)}px;display:block`;
-}
-// 위치 지정 모드에서 드래그를 마치면, 그린 사각형(또는 거의 움직이지 않았으면 클릭 지점 중심의 작은 박스)을 %좌표로 변환해 저장
-function finishDimDraw(endX,endY){
-  _dimDrawing=false;
-  const db=document.getElementById('drwDragBox');
-  if(db) db.style.display='none';
-  const start=_dimDrawStartXY; _dimDrawStartXY=null;
-  if(!start||_dimLocatePickIndex==null) return;
-  const i=_dimLocatePickIndex;
-  const rec=getDrawing(_activeDrwId);
-  const el=document.getElementById('drwPreviewEl');
-  if(!rec||!el||!rec.info||!rec.info.dimensions||!rec.info.dimensions[i]) return;
-  const elRect=el.getBoundingClientRect();
-  const dragDist=Math.hypot(endX-start.x,endY-start.y);
-  let x1,y1,x2,y2;
-  if(dragDist<6){
-    // 거의 움직이지 않았으면 단순 클릭으로 간주 — 클릭 지점을 중심으로 한 작은 고정 크기 박스
-    const cxPct=((endX-elRect.left)/elRect.width)*100;
-    const cyPct=((endY-elRect.top)/elRect.height)*100;
-    const hw=2,hh=1.5;
-    x1=cxPct-hw; y1=cyPct-hh; x2=cxPct+hw; y2=cyPct+hh;
-  }else{
-    x1=((start.x-elRect.left)/elRect.width)*100;
-    y1=((start.y-elRect.top)/elRect.height)*100;
-    x2=((endX-elRect.left)/elRect.width)*100;
-    y2=((endY-elRect.top)/elRect.height)*100;
-  }
-  const xMin=Math.max(0,Math.min(x1,x2)), xMax=Math.min(100,Math.max(x1,x2));
-  const yMin=Math.max(0,Math.min(y1,y2)), yMax=Math.min(100,Math.max(y1,y2));
-  const loc={
-    page: rec.type==='application/pdf'?_drwPdfCurrentPage:1,
-    x:xMin, y:yMin, w:Math.max(0.5,xMax-xMin), h:Math.max(0.5,yMax-yMin)
-  };
-  rec.info.dimensions[i].location=loc;
-  persistDrawings();
-  cancelDimLocatePick();
-  _dimHighlightTarget=loc;
-  applyDimHighlight();
-  const card=document.querySelectorAll('.dim-card')[i];
-  if(card&&!card.classList.contains('locatable')){
-    card.classList.add('locatable');
-    card.title='클릭하면 도면에서 위치를 표시합니다';
-    card.addEventListener('click',()=>highlightDim(i));
-    const labelEl=card.querySelector('.dim-label');
-    if(labelEl&&!labelEl.querySelector('.dim-locate-ic')){
-      const ic=document.createElement('i');
-      ic.className='ti ti-focus-2 dim-locate-ic';
-      labelEl.insertBefore(ic,labelEl.querySelector('.dim-locate-edit-ic'));
-    }
-  }
-  toast('위치가 저장되었습니다','ok');
-}
-function applyDimHighlight(){
-  const box=document.getElementById('drwPreviewBox');
-  const el=document.getElementById('drwPreviewEl'); // 도면 이미지(<img>) 또는 PDF 렌더링 결과(<canvas>)
-  const hi=document.getElementById('drwHighlight');
-  if(!box||!el||!hi||!_dimHighlightTarget) return;
-  if(el.tagName==='IMG'&&(!el.complete||!el.naturalWidth)) return; // 이미지 로드 완료 후 다시 시도 (onload에서 재호출됨)
-  if(el.tagName==='CANVAS'&&(el.style.display==='none'||!el.width)) return; // PDF 렌더링 완료 후 다시 시도 (renderPdfPreview에서 재호출됨)
-  const loc=_dimHighlightTarget;
-  if(_dimShouldFrame){ _dimShouldFrame=false; frameDimTarget(loc); } // 치수가 화면에 잘 보이도록 자동 확대/이동 (elRect는 이후 변경된 transform 기준으로 다시 읽음)
-  const x=Math.min(96,Math.max(0,parseLocNum(loc.x)||0));
-  const y=Math.min(96,Math.max(0,parseLocNum(loc.y)||0));
-  const w=Math.min(100-x,Math.max(1,parseLocNum(loc.w)||8));
-  const h=Math.min(100-y,Math.max(1,parseLocNum(loc.h)||8));
-  const boxRect=box.getBoundingClientRect();
-  const elRect=el.getBoundingClientRect();
-  const left=(elRect.left-boxRect.left)+(x/100)*elRect.width;
-  const top=(elRect.top-boxRect.top)+(y/100)*elRect.height;
-  hi.style.cssText=`left:${left}px;top:${top}px;width:${(w/100)*elRect.width}px;height:${(h/100)*elRect.height}px;display:block`;
-}
 
-/* ─ PDF 도면 미리보기 렌더링 (pdf.js 지연 로드 후 1페이지를 캔버스에 렌더링 — 치수 하이라이트용) ─ */
+/* ─ PDF 도면 미리보기 렌더링 (pdf.js 지연 로드 후 1페이지를 캔버스에 렌더링) ─ */
 const PDFJS_VER='3.11.174';
 let _pdfJsLoadPromise=null;
 let _drwPdfRenderToken=0;
@@ -2439,13 +2488,12 @@ function loadPdfJs(){
   return _pdfJsLoadPromise;
 }
 // pixelScaleOverride가 있으면 화질 향상용 재렌더링: 화면 표시 크기(canvas.style.width/height)는 그대로 두고
-// 캔버스 내부 해상도만 올려서 다시 그린다 (줌/팬 좌표 계산 기준인 offsetWidth/Height가 안 바뀌므로 안전)
-async function renderPdfPreview(rec,pageNum,pixelScaleOverride){
-  pageNum=pageNum||1;
+// 캔버스 내부 해상도만 올려서 다시 그린다 (확대해도 CSS로 늘리기만 하면 흐려지므로, 실제 더 높은 해상도로 다시 그림)
+async function renderPdfPreview(rec,pixelScaleOverride){
   const myToken=++_drwPdfRenderToken;
   try{
     await loadPdfJs();
-    if(myToken!==_drwPdfRenderToken) return; // 그 사이 다른 도면/페이지 요청으로 전환됨
+    if(myToken!==_drwPdfRenderToken) return; // 그 사이 다른 도면 요청으로 전환됨
     let pdf=_drwPdfDoc;
     if(!pdf||_drwPdfDocId!==rec.id){
       const bin=atob(rec.data);
@@ -2455,9 +2503,7 @@ async function renderPdfPreview(rec,pageNum,pixelScaleOverride){
       if(myToken!==_drwPdfRenderToken) return;
       _drwPdfDoc=pdf; _drwPdfDocId=rec.id;
     }
-    _drwPdfPageCount=pdf.numPages;
-    pageNum=Math.min(Math.max(1,pageNum),pdf.numPages);
-    const page=await pdf.getPage(pageNum);
+    const page=await pdf.getPage(1);
     if(myToken!==_drwPdfRenderToken) return;
     const canvas=document.getElementById('drwPreviewEl');
     if(!canvas) return;
@@ -2471,35 +2517,28 @@ async function renderPdfPreview(rec,pageNum,pixelScaleOverride){
       const targetMaxHeight=600; // .drw-preview의 max-height와 맞춰 세로로 긴 도면이 찌그러지지 않도록 함
       const fitScale=Math.min(targetWidth/baseViewport.width,targetMaxHeight/baseViewport.height);
       _drwPdfBaseFitScale=fitScale;
-      scale=fitScale*dpr;
+      scale=fitScale*Math.max(dpr,3);
     }
     const viewport=page.getViewport({scale});
     canvas.width=viewport.width; canvas.height=viewport.height;
     if(!pixelScaleOverride){
-      canvas.style.width=(viewport.width/dpr)+'px';
-      canvas.style.height=(viewport.height/dpr)+'px';
+      canvas.style.width=(baseViewport.width*_drwPdfBaseFitScale)+'px';
+      canvas.style.height=(baseViewport.height*_drwPdfBaseFitScale)+'px';
     }
     await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
     if(myToken!==_drwPdfRenderToken) return;
     canvas.style.display='inline-block';
     const fallback=document.getElementById('drwPdfFallback');
     if(fallback) fallback.style.display='none';
-    _drwPdfCurrentPage=pageNum;
-    _drwPdfRenderedPixelScale=scale; // 현재 캔버스가 실제로 렌더링된 해상도 배율 (확대 시 재렌더링 필요 여부 판단용)
-    const pageInd=document.getElementById('drwPdfPageIndicator');
-    if(pageInd){
-      if(_drwPdfPageCount>1){ pageInd.textContent=`${pageNum} / ${_drwPdfPageCount} 페이지`; pageInd.style.display='block'; }
-      else pageInd.style.display='none';
-    }
-    applyDimHighlight();
+    _drwPdfRenderedPixelScale=scale;
+    applyPreviewZoom(); // 재렌더링 후에도 현재 확대 배율 유지
   }catch(e){
     console.error('PDF 미리보기 렌더링 실패',e);
     const status=document.getElementById('drwPdfStatus');
     if(status) status.textContent='미리보기를 불러올 수 없습니다 (원본은 카드의 아이콘 클릭 시 확인 가능)';
   }
 }
-// 확대 중 일정 배율을 넘으면(현재 렌더링 해상도 대비 화면이 더 커지면) pdf.js로 더 높은 해상도로 다시 렌더링해 선명하게 유지
-// (이미지(JPG/PNG) 도면은 원본 해상도가 한계라 이 방식이 적용되지 않음 — <canvas>일 때만 동작)
+// 확대 중 일정 배율을 넘으면 pdf.js로 더 높은 해상도로 다시 렌더링해 선명하게 유지 (이미지 도면은 원본 해상도가 한계라 적용 불가)
 let _pdfUpscaleTimer=null;
 function scheduleMaybeUpscalePdf(){
   const el=document.getElementById('drwPreviewEl');
@@ -2507,11 +2546,11 @@ function scheduleMaybeUpscalePdf(){
   clearTimeout(_pdfUpscaleTimer);
   _pdfUpscaleTimer=setTimeout(()=>{
     const dpr=window.devicePixelRatio||1;
-    const neededScale=_drwPdfBaseFitScale*dpr*Math.min(_dimPvScale,8);
+    const neededScale=_drwPdfBaseFitScale*dpr*_dimPvScale;
     if(neededScale<=_drwPdfRenderedPixelScale*1.15) return; // 이미 충분히 선명하면 다시 그리지 않음
     const rec=getDrawing(_activeDrwId);
     if(!rec||rec.type!=='application/pdf') return;
-    renderPdfPreview(rec,_drwPdfCurrentPage,neededScale);
+    renderPdfPreview(rec,neededScale);
   },220);
 }
 
@@ -2701,9 +2740,10 @@ function addProjDrawing(file){
   const reader=new FileReader();
   reader.onload=(ev)=>{
     const id='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+    const mime=inferDrawingMime(file);
     const rec={
       id, role: projDrawings.length===0?'assy':'sub', label:'',
-      name:file.name, type:file.type,
+      name:file.name, type:mime,
       data:ev.target.result.split(',')[1], dataUrl:ev.target.result,
       info:null
     };
@@ -2717,6 +2757,13 @@ function addProjDrawing(file){
 function persistDrawings(){
   const toSave=projDrawings.map(d=>({id:d.id,role:d.role,label:d.label,name:d.name,type:d.type,data:d.data,info:d.info}));
   idbSet('proj_drawings',toSave).catch(()=>{});
+}
+// 도면 분석 결과의 치수 카드(label/value/unit/tolerance/note)를 AI가 잘못 판단한 경우 직접 고칠 수 있도록
+function editDimField(drwId,i,field,el){
+  const rec=getDrawing(drwId);
+  if(!rec||!rec.info||!rec.info.dimensions||!rec.info.dimensions[i]) return;
+  rec.info.dimensions[i][field]=el.textContent.trim();
+  persistDrawings();
 }
 function setDrawingRole(id,role){
   const d=getDrawing(id); if(!d) return;
@@ -3126,7 +3173,7 @@ ${drws.length?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악�
 async function analyze(idx){
   const p=procs[idx];
   const steps=['잠재 고장모드 도출 중...','고장 영향 및 심각도(S) 평가 중...','잠재 원인 및 발생도(O) 분석 중...','현행 관리방법 및 검출도(D) 평가 중...','권장 조치사항 도출 중...','Control Plan 항목 생성 중...'];
-  const ESTIMATED_TOKENS=6000; // 진행률 계산용 예상 출력 토큰 (실측 아님, 체감용 추정치)
+  const ESTIMATED_TOKENS=9000; // 진행률 계산용 예상 출력 토큰 (thinking 포함, 실측 아님, 체감용 추정치)
   const abortCtrl=new AbortController();
   _procAbortCtrls[idx]=abortCtrl;
 
@@ -3166,32 +3213,34 @@ async function analyze(idx){
     });
     content.push({type:'text',text:buildPrompt(p)});
 
-    const res=await fetch(API_URL,{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'x-api-key':getKey(),
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'
-      },
-      body:JSON.stringify({
-        model:'claude-sonnet-4-5',
-        max_tokens:16000,
+    const model=getDrawingAnalysisModel();
+    const res=await fetchClaudeMessages(
+      {
+        model,
+        max_tokens:24000,
+        thinking:{type:'adaptive',display:'summarized'},
         system:SYSTEM_PROMPT,
         messages:[{role:'user',content}],
         stream:true
-      }),
-      signal:abortCtrl.signal
-    });
+      },
+      abortCtrl.signal
+    );
     if(!res.ok){
+      let detail='';
+      try{ const e=await res.json(); detail=e?.error?.message?(' - '+e.error.message):''; }catch(_){ }
+      if(res.status===400 && /model|unsupported|invalid/i.test(detail)){
+        throw new Error(`Anthropic 모델이 허용되지 않습니다. 현재 사용 모델: ${model}. API 키 권한/모델 접근 권한을 확인하거나 다른 지원 모델로 재시도하세요.${detail}`);
+      }
       const e=await res.json().catch(()=>({error:{message:`HTTP ${res.status}`}}));
       throw new Error(e.error?.message||`HTTP ${res.status}`);
     }
 
     // ─ SSE 스트림 직접 파싱하여 누적 텍스트 길이로 진행률(%) 추정 ─
+    // (thinking 단계에서도 델타가 오므로 thinking+text 길이를 합산해야
+    //  "생각 중"인 동안 진행률이 멈춰있는 것처럼 보이지 않는다)
     const reader=res.body.getReader();
     const decoder=new TextDecoder();
-    let buf='', text='', wasTruncated=false;
+    let buf='', text='', thinkingLen=0, wasTruncated=false;
     while(true){
       const {done,value}=await reader.read();
       if(done) break;
@@ -3206,7 +3255,12 @@ async function analyze(idx){
         try{ evt=JSON.parse(payload); }catch(_){ continue; }
         if(evt.type==='content_block_delta'&&evt.delta?.text){
           text+=evt.delta.text;
-          const outputTokens=Math.round(text.length/4);
+          const outputTokens=Math.round((text.length+thinkingLen)/4);
+          const pct=Math.min(96,Math.round((outputTokens/ESTIMATED_TOKENS)*100));
+          setPct(pct);
+        }else if(evt.type==='content_block_delta'&&evt.delta?.thinking){
+          thinkingLen+=evt.delta.thinking.length;
+          const outputTokens=Math.round((text.length+thinkingLen)/4);
           const pct=Math.min(96,Math.round((outputTokens/ESTIMATED_TOKENS)*100));
           setPct(pct);
         }else if(evt.type==='message_delta'&&evt.delta?.stop_reason==='max_tokens'){
