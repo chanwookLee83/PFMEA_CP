@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pfmea-cp-v4.4';
+const CACHE_NAME = 'pfmea-cp-v4.8';
 const STATIC_ASSETS = [
   './',
   './index.html',
