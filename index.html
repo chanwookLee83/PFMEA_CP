@@ -2262,6 +2262,7 @@ function applyPreviewTransform(){
   el.style.transform=`translate(${ox}px,${oy}px) scale(${_dimPvScale})`;
   const label=document.getElementById('drwPvZoomLabel');
   if(label) label.textContent=Math.round(_dimPvScale*100)+'%';
+  applyDimHighlight(); // 확대/이동할 때마다 하이라이트 박스도 같이 따라가도록 위치 재계산
 }
 function zoomPreview(delta){
   const prev=_dimPvScale;
