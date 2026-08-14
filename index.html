@@ -398,6 +398,7 @@ td[contenteditable="true"]:focus{
 .flow-card.lane-card-main{border-color:var(--accent);background:linear-gradient(180deg,var(--bg2),var(--bg3))}
 .flow-card-num{font-size:9.5px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.3px}
 .flow-card-name{font-size:12px;font-weight:600;color:var(--text1);line-height:1.3;margin-top:1px}
+.flow-card-material{font-size:10px;font-weight:500;color:var(--text3);line-height:1.3;margin-top:1px}
 .flow-ng-tag{
   position:absolute;left:calc(100% + 26px);top:50%;transform:translateY(-50%);
   display:flex;flex-direction:column;align-items:center;gap:1px;
@@ -1438,14 +1439,15 @@ function flowCardHtml(p,laneClass){
   const sym=FLOW_SYMBOLS[symKey];
   const idx=procs.indexOf(p);
   const showNg=(symKey==='inspect'||symKey==='work_inspect')&&laneClass==='lane-card-main';
-  // Sub/외주 레인 카드는 공정명 대신, 지정된 하위 자재/부품명이 있으면 그것을 표시(그 공정에서 실제로 다루는 자재를 흐름도에 드러내기 위함)
+  // Sub/외주 레인 카드는 공정명은 그대로 유지하고, 지정된 하위 자재/부품명이 있으면 그 아래 작은 글씨로 함께 표시
   const isFeeder=laneClass==='lane-card-out'||laneClass==='lane-card-sub';
-  const displayName=(isFeeder&&p.subMaterial&&p.subMaterial.trim())?p.subMaterial.trim():(p.name||'');
+  const materialLine=(isFeeder&&p.subMaterial&&p.subMaterial.trim())?`<div class="flow-card-material">${esc(p.subMaterial.trim())}</div>`:'';
   return `<div class="flow-card ${laneClass}" data-idx="${idx}" onclick="jumpToProc(${idx})" title="클릭 시 이 공정의 PFMEA로 이동">
       <span class="fsym-shape sym-${sym.shape}"></span>
       <div>
         <div class="flow-card-num">${esc(p.num||'')}</div>
-        <div class="flow-card-name">${esc(displayName)}</div>
+        <div class="flow-card-name">${esc(p.name||'')}</div>
+        ${materialLine}
       </div>
       ${showNg?'<div class="flow-ng-tag">NG<span>SCRAP</span></div>':''}
     </div>`;
