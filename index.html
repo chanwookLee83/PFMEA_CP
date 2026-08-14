@@ -1543,13 +1543,19 @@ function drawFlowConnectors(){
     const a=rectOf(mainCards[i]), b=rectOf(mainCards[i+1]);
     lines+=`<line x1="${a.cx}" y1="${a.bottom}" x2="${b.cx}" y2="${b.top}" stroke="#3d63f5" stroke-width="2" marker-end="url(#flowArrow)"/>`;
   }
+  // 외주/Sub → Main 연결은 대각선 대신 직각(엘보) 경로로 그린다 — 소스 오른쪽에서 나와 중간 지점에서 수직으로 꺾인 뒤 타겟 왼쪽으로 들어감
+  const feederTargetCount={};
   wrap.querySelectorAll('.lane-card-out, .lane-card-sub').forEach(feeder=>{
     const targetIdx=feeder.getAttribute('data-target-idx');
     if(targetIdx===null||targetIdx==='') return;
     const mainCard=wrap.querySelector(`.lane-card-main[data-idx="${targetIdx}"]`);
     if(!mainCard) return;
     const f=rectOf(feeder), m=rectOf(mainCard);
-    lines+=`<line x1="${f.right}" y1="${f.cy}" x2="${m.left}" y2="${m.cy}" stroke="#c5cce6" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#flowArrowMuted)"/>`;
+    // 같은 Main 공정으로 합쳐지는 연결선이 여러 개면 꺾이는 지점을 조금씩 어긋나게 해 선끼리 겹치지 않도록 함
+    const n=feederTargetCount[targetIdx]||0;
+    feederTargetCount[targetIdx]=n+1;
+    const midX=Math.round((f.right+m.left)/2)+n*10;
+    lines+=`<path d="M ${f.right} ${f.cy} L ${midX} ${f.cy} L ${midX} ${m.cy} L ${m.left} ${m.cy}" fill="none" stroke="#c5cce6" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#flowArrowMuted)"/>`;
   });
   svg.innerHTML=`<defs>
       <marker id="flowArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#3d63f5"></path></marker>
