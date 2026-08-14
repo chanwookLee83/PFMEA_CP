@@ -2053,14 +2053,15 @@ function renderCP(p,c){
         <col style="width:150px">  <!-- 관리항목-공정 -->
         <col style="width:130px">  <!-- 규격/공차 -->
         <col style="width:140px">  <!-- 측정기법 -->
+        <col style="width:44px">   <!-- F/P -->
         <col style="width:56px">   <!-- 자동검사 -->
-        <col style="width:56px">   <!-- Size -->
+        <col style="width:56px">   <!-- 주기 -->
         <col style="width:80px">   <!-- 빈도 -->
         <col style="width:140px">  <!-- 관리방법 -->
         <col style="width:44px">   <!-- 생산 -->
         <col style="width:44px">   <!-- 자재 -->
         <col style="width:44px">   <!-- QC -->
-        <col style="width:180px">  <!-- 반응계획 -->
+        <col style="width:180px">  <!-- 이상 발생시 조치사항 -->
         <col style="width:120px">  <!-- 비고 -->
         <col style="width:32px">   <!-- 삭제 -->
       </colgroup>
@@ -2073,15 +2074,16 @@ function renderCP(p,c){
         <th>관리 항목 - 제품</th>
         <th>관리 항목 - 공정</th>
         <th>규격/공차</th>
-        <th>측정기법</th>
+        <th>측정방법</th>
+        <th style="text-align:center">F/P</th>
         <th style="text-align:center">자동검사</th>
-        <th style="text-align:center">Size</th>
+        <th style="text-align:center">주기</th>
         <th style="text-align:center">빈도</th>
         <th>관리방법</th>
         <th style="text-align:center">생산</th>
         <th style="text-align:center">자재</th>
         <th style="text-align:center">QC</th>
-        <th style="min-width:120px">반응계획</th>
+        <th style="min-width:120px">이상 발생시 조치사항</th>
         <th>비고</th>
         <th style="width:32px"></th>
       </tr></thead>
@@ -2120,6 +2122,7 @@ function renderCP(p,c){
                 <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'featProc',this)">${esc(rw.featProc||rw.feat)}</td>
                 <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'spec',this)">${esc(rw.spec)}</td>
                 <td contenteditable="true" onblur="sc(${cur},'cp',${rr},'gage',this)">${esc(rw.gage)}</td>
+                <td style="text-align:center"><input type="checkbox" ${(rw.fp!==undefined?rw.fp==='○':(rw.char==='SC'||rw.char==='CC'))?'checked':''} onchange="scv(${cur},'cp',${rr},'fp',this.checked?'○':'')"></td>
                 <td style="text-align:center"><input type="checkbox" ${rw.auto==='○'?'checked':''} onchange="scv(${cur},'cp',${rr},'auto',this.checked?'○':'')"></td>
                 <td style="text-align:center" contenteditable="true" onblur="sc(${cur},'cp',${rr},'size',this)">${esc(rw.size)}</td>
                 <td style="text-align:center" contenteditable="true" onblur="sc(${cur},'cp',${rr},'freq',this)">${esc(rw.freq)}</td>
@@ -2259,7 +2262,7 @@ function addRow(){
 }
 function addCpRow(){
   const p=procs[cur];
-  p.cp.push({pn:p.num,flow:p.flowLane||'MAIN',mach:'',char:'일반',featProd:'',featProc:'',spec:'',auto:'',gage:'',size:'5',freq:'초물/주물',method:'',respProd:'○',respMat:'',respQC:'○',react:'',note:''});
+  p.cp.push({pn:p.num,flow:p.flowLane||'MAIN',mach:'',char:'일반',featProd:'',featProc:'',spec:'',auto:'',gage:'',fp:'',size:'5',freq:'초물/주물',method:'',respProd:'○',respMat:'',respQC:'○',react:'',note:''});
   renderContent(); saveAll();
 }
 /* ─ Edit Process Modal ─ */
@@ -3378,6 +3381,7 @@ const SYSTEM_PROMPT=`당신은 AIAG-VDA PFMEA 5th Edition 및 IATF 16949 Control
       "spec": "규격/공차",
       "auto": "자동검사 여부 — 비전검사기/센서/PLC 등 설비가 자동 판정하면 '○', 작업자 육안·수동 게이지 확인이면 빈 문자열",
       "gage": "측정기법",
+      "fp": "F/P(특별특성 대상여부) — char가 SC 또는 CC면 '○', char가 일반이면 빈 문자열 (char 값과 반드시 일치시킬 것)",
       "size": "샘플크기",
       "freq": "빈도",
       "method": "관리방법",
@@ -3428,6 +3432,7 @@ Control Plan 작성 규칙 — 관리 항목 리스트:
 Control Plan 작성 규칙 — 공정흐름도/자동검사/관리분담:
 - flow: 공정 정보에 "외주", "사급", "협력사 위탁" 등의 표현이 있으면 "외주", 이 공정이 검사·포장·부자재 준비 등 보조/지원 성격이면 "SUB", 그 외 일반적인 자사 주공정이면 "MAIN"으로 판단 (특별한 근거가 없으면 기본값 MAIN)
 - auto: method나 gage에 비전검사기·센서·PLC·자동측정기·자동선별기 등 자동화 설비가 명시되어 있으면 '○', 육안검사·수동 게이지·작업자 확인이면 빈 문자열
+- fp: char가 SC 또는 CC(특별특성)면 반드시 '○', char가 일반이면 반드시 빈 문자열 (char와 불일치 금지)
 - respProd(생산): 이 관리방법을 현장 생산 작업자/설비가 직접 수행/운영하면 '○' (대부분의 공정관리 항목에 해당)
 - respQC(품질/QC): 품질 부서의 정기 검사·판정·기록 관리가 필요하면 '○' (SC/CC 특성, 검사공정, 샘플링 검사 등은 원칙적으로 '○')
 - respMat(자재): 원자재/구매품 입고검사, 수입검사, 자재 성적서 확인 등 자재 부서 담당 항목에만 '○', 그 외에는 빈 문자열
@@ -3850,8 +3855,8 @@ function exportExcel(){
       d[7]=c.featProd||c.feat||'';  // 제품 특성
       d[8]=c.featProc||c.feat||'';  // 공정 특성
       d[9]=c.char||'';          // 특별특성 (SC/CC)
-      // K(F/P) 대상여부 — SC/CC면 F/P 표기
-      if(c.char==='SC'||c.char==='CC') d[10]='○';
+      // K(F/P) 대상여부 — 명시된 fp 값 우선, 없으면 SC/CC일 때 자동 표기(구버전 데이터 호환)
+      d[10]=c.fp!==undefined?c.fp:((c.char==='SC'||c.char==='CC')?'○':'');
       d[11]=c.auto||'';         // L(자동검사)
       d[12]=c.spec||'';         // 규격
       d[13]=c.gage||'';         // 확인방법
