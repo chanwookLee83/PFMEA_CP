@@ -50,7 +50,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 .topmeta-logo h1{font-size:13px;font-weight:600;line-height:1.2;white-space:nowrap}
 .topmeta-logo p{font-size:9.5px;color:var(--text3);margin-top:1px;white-space:nowrap}
 .topmeta-field{display:flex;flex-direction:column;gap:4px}
-.topmeta-field label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:600;white-space:nowrap}
+.topmeta-field label{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:600;white-space:nowrap}
 .topmeta-field input{
   background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
   padding:6px 8px;color:var(--text1);font-size:12.5px;font-weight:500;outline:none;
@@ -95,14 +95,16 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 .drwstrip::-webkit-scrollbar{height:5px}
 .drwstrip::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .drwstrip-side{
-  display:flex;flex-direction:column;gap:6px;flex-shrink:0;width:200px;
+  display:flex;flex-direction:column;gap:6px;flex-shrink:0;width:300px;
   position:sticky;left:0;background:var(--bg2);z-index:2;
 }
 .drwstrip-side label{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--text3);font-weight:600;display:block}
 .drwstrip-side .part-hint-input{width:100%}
-.drwstrip-upload{padding:9px 8px}
-.drwstrip-upload i{font-size:18px;margin-bottom:3px}
-.drwstrip-upload p{font-size:10.5px}
+.drwstrip-upload{
+  padding:0;align-self:flex-start;width:38px;height:38px;
+  display:flex;align-items:center;justify-content:center;
+}
+.drwstrip-upload i{font-size:18px;margin:0}
 .drwstrip-cards{display:flex;gap:8px;flex-shrink:0}
 .drwstrip-empty{
   font-size:11px;color:var(--text3);display:flex;align-items:center;
@@ -694,7 +696,7 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
   .topmeta-field input{width:100%}
   #partNum,#partName,#customer,#plant,#pfmeaNo{width:auto}
   .topmeta-rules-panel{right:auto;left:0}
-  .drwstrip-side{width:150px}
+  .drwstrip-side{width:300px}
   .proc-col-head h2 span,.proc-col-head h2{font-size:10px}
 }
 </style>
@@ -765,11 +767,11 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
         value="${esc(projPartHint||'')}"
         oninput="projPartHint=this.value;idbSet('proj_part_hint',this.value).catch(()=>{})"
         title="AI 도면/공정 분석 시 참고 정보로 함께 활용됩니다">
-      <div id="projUploadZone" class="upload-zone drwstrip-upload"
+      <div id="projUploadZone" class="upload-zone drwstrip-upload" title="PDF / 이미지 업로드"
            onclick="document.getElementById('projFileIn').click()"
            ondrop="onProjDrop(event)" ondragover="onProjOver(event)" ondragleave="onProjLeave(event)">
         <i class="ti ti-file-upload" aria-hidden="true"></i>
-        <p id="projUploadLabel">PDF / 이미지 업로드</p>
+        <p id="projUploadLabel" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap">PDF / 이미지 업로드</p>
       </div>
       <input type="file" id="projFileIn" accept=".pdf,image/*" multiple style="display:none" onchange="onProjFileSel(event)">
     </div>
@@ -2820,9 +2822,12 @@ function updateDrwCountBadge(){
 }
 function renderDrawingList(){
   const label=document.getElementById('projUploadLabel');
+  const zone=document.getElementById('projUploadZone');
   const thumb=document.getElementById('projThumb');
   const actions=document.getElementById('drwAnalyzeRow');
-  if(label) label.textContent=projDrawings.length?'+ 도면 추가':'PDF / 이미지 업로드';
+  const uploadText=projDrawings.length?'+ 도면 추가':'PDF / 이미지 업로드';
+  if(label) label.textContent=uploadText;
+  if(zone) zone.title=uploadText;
   updateDrwCountBadge();
 
   if(!projDrawings.length){
