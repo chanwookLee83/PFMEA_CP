@@ -109,6 +109,18 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
   padding:0 6px;white-space:nowrap;flex-shrink:0;align-self:center;
 }
 .drwstrip-actions{display:flex;align-items:center;flex-shrink:0;padding-left:2px}
+.drwstrip-side-head{display:flex;align-items:center;justify-content:space-between;gap:6px;cursor:pointer;user-select:none}
+.drwstrip-side-head label{margin:0;cursor:pointer}
+.drwstrip-collapse-btn{background:none;border:none;color:var(--text3);cursor:pointer;padding:2px;display:flex;align-items:center;flex-shrink:0}
+.drwstrip-collapse-btn i{font-size:13px;display:block;transition:transform .15s}
+.drwstrip.collapsed .drwstrip-collapse-btn i{transform:rotate(-90deg)}
+.drwstrip-count-badge{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:20px;background:var(--bg4);color:var(--accent2);border:1px solid var(--border2);margin-left:4px;display:none}
+.drwstrip-count-badge.on{display:inline-block}
+.drwstrip.collapsed{padding-top:8px;padding-bottom:8px}
+.drwstrip.collapsed .part-hint-input,
+.drwstrip.collapsed .drwstrip-upload,
+.drwstrip.collapsed .drwstrip-cards,
+.drwstrip.collapsed .drwstrip-actions{display:none}
 .pdf-thumb{ /* 도면 업로드 카드(썸네일+도면번호 입력창) 전체 너비. 도면번호 입력창을 넓히려면 width 값을 조정 */
   background:var(--bg3);border:1px solid var(--border);
   border-radius:var(--r);padding:8px 10px;text-align:left;
@@ -742,7 +754,12 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
   <!-- ── 도면 스트립: 좌측 업로드/힌트 + 가로 스크롤 카드 + 재분석 버튼 ── -->
   <div class="drwstrip" id="drwStrip">
     <div class="drwstrip-side">
-      <label>프로젝트 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(ASSY + 하위 자재)</span></label>
+      <div class="drwstrip-side-head" onclick="toggleDrwStrip()">
+        <label>프로젝트 도면 <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(ASSY + 하위 자재)</span><span class="drwstrip-count-badge" id="drwCountBadge"></span></label>
+        <button type="button" class="drwstrip-collapse-btn" id="drwCollapseBtn" title="접기/펼치기" onclick="event.stopPropagation();toggleDrwStrip()">
+          <i class="ti ti-chevron-down"></i>
+        </button>
+      </div>
       <input type="text" id="partHintInput" class="part-hint-input"
         placeholder="이 부품/어셈블리 적용처 (예: ECU)"
         value="${esc(projPartHint||'')}"
@@ -2786,11 +2803,27 @@ function removeProjDrawing(id){
   renderDrawingList();
 }
 
+/* ─ 프로젝트 도면 등록 패널 접기/펼치기 (상태는 새로고침 후에도 유지) ─ */
+function toggleDrwStrip(force){
+  const strip=document.getElementById('drwStrip');
+  if(!strip) return;
+  const collapsed = typeof force==='boolean' ? force : !strip.classList.contains('collapsed');
+  strip.classList.toggle('collapsed', collapsed);
+  try{ localStorage.setItem('ui_drwstrip_collapsed', collapsed?'1':'0'); }catch(_){}
+}
+function updateDrwCountBadge(){
+  const badge=document.getElementById('drwCountBadge');
+  if(!badge) return;
+  const n=projDrawings.length;
+  badge.textContent=n;
+  badge.classList.toggle('on', n>0);
+}
 function renderDrawingList(){
   const label=document.getElementById('projUploadLabel');
   const thumb=document.getElementById('projThumb');
   const actions=document.getElementById('drwAnalyzeRow');
   if(label) label.textContent=projDrawings.length?'+ 도면 추가':'PDF / 이미지 업로드';
+  updateDrwCountBadge();
 
   if(!projDrawings.length){
     thumb.innerHTML='<div class="drwstrip-empty">등록된 도면이 없습니다</div>';
@@ -3532,6 +3565,7 @@ function initApp(){
   if(procs.length>0){ selProc(cur>=0?cur:0); } else { renderWelcome(); }
   checkApiBar();
   updateApiKeyBtn();
+  try{ if(localStorage.getItem('ui_drwstrip_collapsed')==='1') toggleDrwStrip(true); }catch(_){}
   idbGet('proj_drawings').then(saved=>{
     if(saved&&saved.length){
       projDrawings=saved.map(d=>({...d,dataUrl:`data:${d.type};base64,${d.data}`}));
