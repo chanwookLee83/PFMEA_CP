@@ -368,14 +368,12 @@ td[contenteditable="true"]:focus{
 .flow-legend-item{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text2);font-weight:500}
 .flow-legend-ng{margin-left:auto;color:var(--danger)}
 .flow-ng-dot{width:9px;height:9px;border-radius:50%;border:1.6px dashed var(--danger);flex-shrink:0}
-.fsym-shape{width:17px;height:17px;flex-shrink:0;position:relative;display:inline-block}
-.fsym-shape.sym-circle{border-radius:50%;background:var(--sym-c,var(--accent))}
-.fsym-shape.sym-diamond{transform:rotate(45deg);border-radius:3px;background:var(--sym-c,var(--warn))}
-.fsym-shape.sym-tri-up{width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:16px solid var(--sym-c,var(--success));background:none;border-radius:0}
-.fsym-shape.sym-tri-down{width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:16px solid var(--sym-c,var(--teal));background:none;border-radius:0}
-.fsym-shape.sym-combo{background:none}
-.fsym-shape.sym-combo::before{content:'';position:absolute;inset:1px;border-radius:50%;background:var(--sym-c,var(--violet))}
-.fsym-shape.sym-combo::after{content:'';position:absolute;inset:5px;border-radius:2px;background:#fff;transform:rotate(45deg)}
+.fsym-shape{width:17px;height:17px;flex-shrink:0;display:inline-block;overflow:visible}
+.fsym-shape.sym-circle{color:var(--sym-c,var(--accent))}
+.fsym-shape.sym-diamond{color:var(--sym-c,var(--warn))}
+.fsym-shape.sym-tri-up{color:var(--sym-c,var(--success))}
+.fsym-shape.sym-tri-down{color:var(--sym-c,var(--teal))}
+.fsym-shape.sym-combo{color:var(--sym-c,var(--violet))}
 .flow-legend-item .fsym-shape.sym-circle{--sym-c:var(--accent)}
 .flow-legend-item .fsym-shape.sym-diamond{--sym-c:var(--warn)}
 .flow-legend-item .fsym-shape.sym-tri-up{--sym-c:var(--success)}
@@ -945,7 +943,7 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
           <option value="receipt">△ 부품 수령</option>
           <option value="work">○ 작업</option>
           <option value="inspect">◇ 검사</option>
-          <option value="work_inspect">◇⃝ ㅎ</option>
+          <option value="work_inspect">◇⃝ 작업 및 검사</option>
           <option value="ship">▽ 출하 & 보관</option>
         </select>
       </div>
@@ -1421,6 +1419,18 @@ function guessFlowSymbol(p){
   return 'work';
 }
 function procFlowSymbol(p){ return (p&&p.flowSymbol&&FLOW_SYMBOLS[p.flowSymbol])?p.flowSymbol:guessFlowSymbol(p); }
+// 공정흐름도 기호 — 배경 채움 없이 테두리(stroke)만으로 표현, 모든 도형이 동일한 17x17 박스 안에 그려짐
+function fsymSvg(shape){
+  const s='fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"';
+  const inner={
+    'tri-up':`<polygon points="8.5,2 15.5,15 1.5,15" ${s}/>`,
+    'tri-down':`<polygon points="8.5,15 15.5,2 1.5,2" ${s}/>`,
+    'circle':`<circle cx="8.5" cy="8.5" r="6.5" ${s}/>`,
+    'diamond':`<polygon points="8.5,1.5 15.5,8.5 8.5,15.5 1.5,8.5" ${s}/>`,
+    'combo':`<circle cx="8.5" cy="8.5" r="6.5" ${s}/><polygon points="8.5,4.7 12.3,8.5 8.5,12.3 4.7,8.5" ${s}/>`
+  }[shape]||'';
+  return `<svg class="fsym-shape sym-${shape}" viewBox="0 0 17 17">${inner}</svg>`;
+}
 // 공정흐름 구분(SUB/외주)을 선택했을 때만 "하위 자재" 입력창을 노출 — Main 공정은 자재 카드가 아니라 공정 자체이므로 불필요
 function toggleSubMaterialField(mode){
   const prefix=mode==='add'?'n':'e';
@@ -1446,7 +1456,7 @@ function flowCardHtml(p,laneClass,seqIdx){
   // data-seq: 공정번호 정렬 순서상의 위치. drawFlowConnectors가 레인에 상관없이 이 순서 그대로
   // 앞 공정 → 다음 공정을 하나의 연속된 화살표 사슬로 이어주는 데 사용한다 (10→20→30 순서가 그대로 화살표 방향이 됨)
   return `<div class="flow-card ${laneClass}" data-idx="${idx}" data-seq="${seqIdx}" onclick="jumpToProc(${idx})" title="클릭 시 이 공정의 PFMEA로 이동">
-      <span class="fsym-shape sym-${sym.shape}"></span>
+      ${fsymSvg(sym.shape)}
       <div>
         <div class="flow-card-num">${esc(p.num||'')}</div>
         <div class="flow-card-name">${esc(p.name||'')}</div>
@@ -1500,7 +1510,7 @@ function renderFlowDiagram(){
       <button class="btn" id="btnFlowImg" onclick="exportFlowImage()" style="flex-shrink:0"><i class="ti ti-photo-down" style="font-size:13px"></i> 이미지로 저장</button>
     </div>
     <div class="flow-legend">
-      ${Object.values(FLOW_SYMBOLS).map(v=>`<div class="flow-legend-item"><span class="fsym-shape sym-${v.shape}"></span>${v.label}</div>`).join('')}
+      ${Object.values(FLOW_SYMBOLS).map(v=>`<div class="flow-legend-item">${fsymSvg(v.shape)}${v.label}</div>`).join('')}
       <div class="flow-legend-item flow-legend-ng"><span class="flow-ng-dot"></span>NG → SCRAP</div>
     </div>
     <div class="flow-diagram-wrap" id="flowDiagramWrap">
@@ -3912,6 +3922,37 @@ function exportExcel(){
   });
   ws2['!cols']=[7.7,5.1,5,5,13.3,13.2,3.3,9.2,9.2,4.1,4,5,24.2,11.8,9.4,10.1,5,4.3,4.3,4.3,4.8,4.8,4.8,4.8,4.1,4.1].map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb,ws2,'을지(CP)');
+
+  // ── 공정흐름도: 화면의 공정 흐름도(레인 구분·기호·연결 순서)를 표 형태로 그대로 옮김 ──
+  const FLOW_GLYPH={'tri-up':'△','circle':'○','diamond':'◇','combo':'◎','tri-down':'▽'};
+  const flowSeq=procs.slice().sort((a,b)=>procNumKey(a)-procNumKey(b));
+  if(flowSeq.length){
+    let flowMainList=flowSeq.filter(p=>procFlowCol(p)==='MAIN');
+    const flowFallback=!flowMainList.length;
+    const flowMainSet=new Set(flowFallback?flowSeq:flowMainList);
+    const F=[['순번','공정번호','구분','기호','공정명','하위자재/부품명','다음 연결 공정','비고']];
+    flowSeq.forEach((p,i)=>{
+      const isMain=flowMainSet.has(p);
+      const col=flowFallback?'MAIN':procFlowCol(p);
+      const symKey=procFlowSymbol(p);
+      const sym=FLOW_SYMBOLS[symKey];
+      const next=flowSeq[i+1];
+      const showNg=(symKey==='inspect'||symKey==='work_inspect')&&isMain;
+      F.push([
+        i+1,
+        p.num||'',
+        isMain?'MAIN':col,
+        `${FLOW_GLYPH[sym.shape]||''} ${sym.label}`,
+        p.name||'',
+        (!isMain&&p.subMaterial)?p.subMaterial:'',
+        next?`→ ${next.num||''} ${next.name||''}`:'(마지막 공정)',
+        showNg?'NG → SCRAP':''
+      ]);
+    });
+    const ws3=XLSX.utils.aoa_to_sheet(F);
+    ws3['!cols']=[6,10,8,14,20,18,22,12].map(w=>({wch:w}));
+    XLSX.utils.book_append_sheet(wb,ws3,'공정흐름도');
+  }
 
   XLSX.writeFile(wb,`PFMEA_CP_${pn||'유라'}_${date.replace(/\./g,'').replace(/\s/g,'')}.xlsx`);
   toast('Excel 다운로드 완료 — 유라 양식','ok');
