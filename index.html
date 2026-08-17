@@ -1353,7 +1353,10 @@ let _drwPdfBaseFitScale = 1; // 초기 "화면에 맞춤" 렌더링 배율(캔�
 let _drwDimViewMode = 'priority'; // 도면 분석 결과 모달의 치수 보기 모드 (priority/critical/all)
 let _drwPdfRenderedPixelScale = 1; // 현재 캔버스가 실제로 렌더링된 해상도 배율 (확대 시 재렌더링 필요 여부 판단용)
 let tab = 'flow';
-let pfmeaSelected = new Set(); // PFMEA 테이블에서 체크박스로 선택된 행 인덱스 (일괄 삭제용)
+let pfmeaSelected = new Set(); // PFMEA 테이블에서 체크박스로 선택된 행 인덱스 (일괄 삭제/복사용)
+let cpSelected = new Set();    // Control Plan 테이블에서 체크박스로 선택된 행 인덱스 (복사용)
+let pfmeaClipboard = [];       // 복사된 PFMEA 행 — 다른 공정 탭으로 이동해 붙여넣기 가능
+let cpClipboard = [];          // 복사된 Control Plan 행 — 다른 공정 탭으로 이동해 붙여넣기 가능
 let upFile = null, upData = null, upType = null;
 // projDrawings: 프로젝트에 등록된 도면 목록 (ASSY 1장 + 하위 자재 여러 장 가능)
 // 각 항목: {id, role:'assy'|'sub', label(도면번호/이름), name(파일명), type(mime), data(base64), dataUrl, info(AI 분석 결과)}
@@ -1442,6 +1445,7 @@ function procNumKey(p){ const n=parseInt(String((p&&p.num)||'').replace(/[^0-9]/
 function jumpToProc(idx){
   cur=idx;
   pfmeaSelected.clear();
+  cpSelected.clear();
   renderList();
   switchTab('pfmea');
 }
@@ -1850,6 +1854,7 @@ function renderList(){
 function selProc(i){
   cur=i;
   pfmeaSelected.clear();
+  cpSelected.clear();
   renderList();
   renderContent();
 }
@@ -2023,8 +2028,14 @@ function renderPFMEA(p,c){
     </table>
     </div>
   </div>
-  <div style="display:flex;gap:8px;justify-content:center;margin-top:4px">
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:4px;flex-wrap:wrap">
     <button class="btn" onclick="addRow()"><i class="ti ti-plus" style="font-size:13px"></i> 행 추가</button>
+    <button class="btn" onclick="copySelectedPfmeaRows()" ${pfmeaSelected.size?'':'disabled'}>
+      <i class="ti ti-copy" style="font-size:13px"></i> 선택 복사${pfmeaSelected.size?` (${pfmeaSelected.size})`:''}
+    </button>
+    <button class="btn" onclick="pastePfmeaRows()" ${pfmeaClipboard.length?'':'disabled'} style="color:var(--accent);border-color:rgba(61,99,245,.3)" title="다른 공정에서 복사한 고장모드를 이 공정에 붙여넣기">
+      <i class="ti ti-clipboard-text" style="font-size:13px"></i> 붙여넣기${pfmeaClipboard.length?` (${pfmeaClipboard.length})`:''}
+    </button>
     <button class="btn" onclick="deleteSelectedPfmeaRows()" ${pfmeaSelected.size?'':'disabled'} style="color:var(--danger);border-color:rgba(220,38,38,.3)">
       <i class="ti ti-trash" style="font-size:13px"></i> 선택 삭제${pfmeaSelected.size?` (${pfmeaSelected.size})`:''}
     </button>
@@ -2036,7 +2047,9 @@ function renderPFMEA(p,c){
 function renderCP(p,c){
   const rows=p.cp||[];
   if(!rows.length){
-    c.innerHTML='<div class="empty"><i class="ti ti-table-off"></i><h3>Control Plan 데이터 없음</h3><p>PFMEA 탭에서 분석 완료 후 표시됩니다</p></div>';
+    c.innerHTML=`<div class="empty"><i class="ti ti-table-off"></i><h3>Control Plan 데이터 없음</h3><p>PFMEA 탭에서 분석 완료 후 표시됩니다</p>
+      ${cpClipboard.length?`<button class="btn" style="margin-top:10px;color:var(--accent);border-color:rgba(61,99,245,.3)" onclick="pasteCpRows()"><i class="ti ti-clipboard-text" style="font-size:13px"></i> 복사한 항목 붙여넣기 (${cpClipboard.length})</button>`:''}
+    </div>`;
     return;
   }
   const charBadge=v=>{
@@ -2054,6 +2067,7 @@ function renderCP(p,c){
     <div class="tbl-wrap">
     <table style="width:max-content;min-width:100%">
       <colgroup>
+        <col style="width:28px">   <!-- 선택 -->
         <col style="width:70px">   <!-- 공정번호 -->
         <col style="width:78px">   <!-- 공정흐름도 -->
         <col style="width:160px">  <!-- 공정명 -->
@@ -2076,6 +2090,7 @@ function renderCP(p,c){
         <col style="width:32px">   <!-- 삭제 -->
       </colgroup>
       <thead><tr>
+        <th><input type="checkbox" id="cpSelectAll" title="전체 선택/해제" onchange="toggleCpSelectAll(this.checked)" ${rows.length&&cpSelected.size===rows.length?'checked':''}></th>
         <th>공정번호</th>
         <th style="text-align:center">공정흐름도</th>
         <th>공정명</th>
@@ -2113,6 +2128,7 @@ function renderCP(p,c){
           for(let k=0;k<span;k++){
             const rr=ri+k, rw=rows[rr];
             html+='<tr>';
+            html+=`<td class="num-cell"><input type="checkbox" onchange="toggleCpSelect(${rr},this.checked)" ${cpSelected.has(rr)?'checked':''}></td>`;
             if(k===0){
               html+=`
                 <td rowspan="${span}" contenteditable="true" onblur="scGroup(${cur},'cp',${ri},${span},'pn',this)">${esc(pnVal)}</td>
@@ -2153,8 +2169,14 @@ function renderCP(p,c){
     </table>
     </div>
   </div>
-  <div style="display:flex;gap:8px;justify-content:center;margin-top:4px">
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:4px;flex-wrap:wrap">
     <button class="btn" onclick="addCpRow()"><i class="ti ti-plus" style="font-size:13px"></i> 행 추가</button>
+    <button class="btn" onclick="copySelectedCpRows()" ${cpSelected.size?'':'disabled'}>
+      <i class="ti ti-copy" style="font-size:13px"></i> 선택 복사${cpSelected.size?` (${cpSelected.size})`:''}
+    </button>
+    <button class="btn" onclick="pasteCpRows()" ${cpClipboard.length?'':'disabled'} style="color:var(--accent);border-color:rgba(61,99,245,.3)" title="다른 공정에서 복사한 Control Plan 항목을 이 공정에 붙여넣기">
+      <i class="ti ti-clipboard-text" style="font-size:13px"></i> 붙여넣기${cpClipboard.length?` (${cpClipboard.length})`:''}
+    </button>
   </div>`;
 }
 
@@ -2265,6 +2287,51 @@ function deleteSelectedPfmeaRows(){
   pfmeaSelected.clear();
   cascadeDeleteCp(ids);
   renderContent(); saveAll();
+}
+// 체크된 고장모드를 클립보드에 복사 — 다른 공정의 PFMEA 탭으로 이동해 붙여넣기로 옮길 수 있다
+function copySelectedPfmeaRows(){
+  if(!pfmeaSelected.size) return;
+  const rows=procs[cur].pfmea||[];
+  pfmeaClipboard=[...pfmeaSelected].sort((a,b)=>a-b).map(i=>({...rows[i]}));
+  toast(`고장모드 ${pfmeaClipboard.length}개 복사 — 다른 공정의 PFMEA 탭에서 붙여넣기 하세요`,'ok');
+  renderContent();
+}
+// 복사해둔 고장모드를 현재 공정에 추가 — id는 새로 발급해 원본/붙여넣은 행이 서로 다른 항목으로 취급되게 함
+function pastePfmeaRows(){
+  if(!pfmeaClipboard.length||cur<0) return;
+  const cloned=pfmeaClipboard.map(r=>({...r,id:genId('fm')}));
+  procs[cur].pfmea=(procs[cur].pfmea||[]).concat(cloned);
+  renderContent(); saveAll();
+  toast(`고장모드 ${cloned.length}개 붙여넣기 완료`,'ok');
+}
+function toggleCpSelect(ri,checked){
+  if(checked) cpSelected.add(ri); else cpSelected.delete(ri);
+  renderContent();
+}
+function toggleCpSelectAll(checked){
+  cpSelected.clear();
+  if(checked) (procs[cur].cp||[]).forEach((_,i)=>cpSelected.add(i));
+  renderContent();
+}
+// 체크된 Control Plan 항목을 클립보드에 복사 — 공정번호(pn)/흐름구분(flow)/PFMEA 연결(srcFmIds)은
+// 대상 공정에서 의미가 달라지므로 제외하고, 붙여넣을 때 대상 공정 기준값으로 새로 채워진다
+function copySelectedCpRows(){
+  if(!cpSelected.size) return;
+  const rows=procs[cur].cp||[];
+  cpClipboard=[...cpSelected].sort((a,b)=>a-b).map(i=>{
+    const {pn,flow,srcFmIds,...rest}=rows[i];
+    return {...rest};
+  });
+  toast(`Control Plan 항목 ${cpClipboard.length}개 복사 — 다른 공정의 CP 탭에서 붙여넣기 하세요`,'ok');
+  renderContent();
+}
+function pasteCpRows(){
+  if(!cpClipboard.length||cur<0) return;
+  const p=procs[cur];
+  const cloned=cpClipboard.map(r=>({...r}));
+  p.cp=(p.cp||[]).concat(cloned);
+  renderContent(); saveAll();
+  toast(`Control Plan 항목 ${cloned.length}개 붙여넣기 완료`,'ok');
 }
 function addRow(){
   procs[cur].pfmea.push({id:genId('fm'),fm:'',effect:'',s:5,cause:'',o:3,ctrlP:'',ctrlD:'검사',detectMethod:'',d:4,action:''});
@@ -3097,6 +3164,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 async function reanalyze(i){
   procs[i].status='analyzing'; procs[i].pfmea=[]; procs[i].cp=[];
   pfmeaSelected.clear();
+  cpSelected.clear();
   renderList(); renderContent();
   await analyze(i);
 }
@@ -3505,6 +3573,23 @@ function extractPartialJson(str){
   return result;
 }
 
+// "#1"/"#2", "(1)"/"(2)", "-1"/"-2" 같은 번호 접미사를 제거해, 이름만 다르게 나뉜 동일 역할 공정을 식별하기 위한 기준 이름
+function procBaseName(name){
+  return String(name||'').replace(/\s*(#\s*\d+|\(\s*\d+\s*\)|[-_]\s*\d+)\s*$/,'').trim();
+}
+// 같은 역할(기준 이름 동일)의 공정 중 이미 AI 분석이 완료된 것을 찾음 — 여러 개면 공정번호가 가장 앞선 것을 기준으로 삼음
+function findAnalyzedSibling(p){
+  const base=procBaseName(p.name);
+  if(!base) return null;
+  let best=null;
+  procs.forEach(p2=>{
+    if(p2===p) return;
+    if(procBaseName(p2.name)!==base) return;
+    if(p2.status!=='done'||!(p2.pfmea&&p2.pfmea.length)) return;
+    if(!best||procNumKey(p2)<procNumKey(best)) best=p2;
+  });
+  return best;
+}
 function buildPrompt(p){
   const equipLabel=p.equipType==='manual'?'Manual(수동) 공정 — 작업자 개입, 육안검사, 인적오류 중심으로 분석':'AUTO(자동설비) 공정 — 설비 파라미터, 센서, 자동검출, PLC 에러 중심으로 분석';
   const globalRuleLine=projGlobalRules&&projGlobalRules.trim()?`\n\n참고 — 프로젝트 전체 공정에 공통 적용되는 담당자 지정 지침 (아래 지침이 특정 공정번호 이후/이전, 특정 조건에만 적용된다는 내용을 포함하면, 반드시 이 공정의 공정번호(${p.num||'N/A'})·공정명(${p.name})이 그 조건에 해당하는지 스스로 판단한 뒤 해당될 때만 반영하고, 해당하지 않으면 무시할 것):
@@ -3514,6 +3599,16 @@ ${projGlobalRules.trim()}`:'';
   const pastLine=p.pastIssues?`\n\n참고 — 과거 유사 차종/프로젝트에서 실제 발생했던 문제점 (담당자 입력, 반드시 반영):
 ${p.pastIssues}
 이 내용은 이론적 추정이 아니라 실제로 발생이 확인된 문제이므로, 이와 직접 관련된 고장모드를 pfmea 배열에 반드시 최소 1개 이상 포함시키세요. 이미 한 번 발생한 문제이므로 발생도(O)를 근거 없이 낮게 잡지 말고 재발 가능성을 현실적으로 반영하며, 현재 이 공정에 그 재발을 막을 수 있는 예방/검출 대책(ctrlP/ctrlD)이 실제로 있는지 냉정하게 판단하여 없다면 action에 구체적인 재발방지 대책을 제시하세요. 관련된 Control Plan 항목도 함께 생성하세요.`:'';
+  // 이름이 "#1"/"#2" 등으로만 구분된, 실질적으로 같은 역할을 하는 병렬 공정이 이미 분석되어 있으면
+  // 그 결과를 참고자료로 함께 전달해 두 공정의 분석 방향(고장모드 구성, S/O/D 판단 기준, 관리방법 유형)이 일관되게 유지되도록 함
+  const sibling=findAnalyzedSibling(p);
+  const siblingLine=sibling?`\n\n참고 — 동일 역할의 다른 공정 "${sibling.name}"(공정번호 ${sibling.num||'N/A'})이 이미 분석되어 있습니다. 이 공정은 그 공정과 이름만 다를 뿐(#1, #2 등) 실질적으로 같은 역할/기능을 수행하는 병렬 공정이므로, 아래 참고 분석과 동일한 방향 — 고장모드의 구성 항목, 심각도(S)·발생도(O)·검출도(D) 판단 기준, 예방/검출 관리방법의 유형과 수준 — 을 유지하여 일관되게 작성하세요. 다만 이 공정만의 고유 조건(도면, 키워드, 과거 이슈, 설비 타입 차이 등)이 있으면 그 차이는 반영해 조정하세요.
+
+[참고 — "${sibling.name}" 공정의 PFMEA 분석 결과]
+${sibling.pfmea.map((r,i)=>`${i+1}. 고장모드: ${r.fm||''} / 영향: ${r.effect||''} (S${r.s||''}) / 원인: ${r.cause||''} (O${r.o||''}) / 예방: ${r.ctrlP||r.ctrl||''} / 검출: ${r.ctrlD||''}(${r.detectMethod||''}, D${r.d||''}) / 조치: ${r.action||''}`).join('\n')}${(sibling.cp&&sibling.cp.length)?`
+
+[참고 — "${sibling.name}" 공정의 Control Plan 항목]
+${sibling.cp.map((c,i)=>`${i+1}. 특성(${c.char||'일반'}): ${c.featProd||c.feat||''} / 규격: ${c.spec||''} / 확인방법: ${c.gage||''} / 주기: ${c.freq||''} / 관리방법: ${c.method||''}`).join('\n')}`:''}`:'';
   // 이 공정에 적용할 도면들 결정 (지정된 도면들 우선, 없으면 ASSY 우선 기본 도면 1장)
   const drws=drawingsForProc(p);
 
@@ -3583,7 +3678,7 @@ CP 작성 규칙(중요):
 - 공정번호: ${p.num||'N/A'}
 - 공정명: ${p.name}
 - 공정 기능/특성: ${p.func}
-- 장비 타입: ${equipLabel}${globalRuleLine}${kwLine}${pastLine}${partLine}${assyLine}${materialLine}${dimLine}
+- 장비 타입: ${equipLabel}${globalRuleLine}${kwLine}${pastLine}${siblingLine}${partLine}${assyLine}${materialLine}${dimLine}
 ${drws.length?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악하여 ':''}
 이 공정에 대한 PFMEA와 Control Plan을 AIAG-VDA 5th Edition 기준으로 작성해주세요.
 실제 자동차 부품 양산 현장에서 발생 가능한 구체적인 내용으로 전문적으로 작성하세요.`;
