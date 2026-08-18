@@ -1108,6 +1108,13 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
       <input id="apiModelInput" type="text" placeholder="Console에서 보이는 정확한 모델명 입력 (예: claude-sonnet-5)" style="margin-top:8px;width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;color:var(--text1);font-size:12px;outline:none">
       <div id="apiModelStatus" style="margin-top:8px;font-size:11px;color:var(--text2)">현재 사용 모델: </div>
     </div>
+    <div class="fblock">
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;text-transform:none" for="twoPassToggle">
+        <span style="font-size:12.5px;color:var(--text1);font-weight:500">2차 자체검증 (AI가 1차 결과를 재검토·수정)</span>
+        <input type="checkbox" id="twoPassToggle" style="width:auto;accent-color:var(--accent);cursor:pointer" onchange="setTwoPassEnabled(this.checked)">
+      </label>
+      <p style="font-size:10.5px;color:var(--text3);margin-top:4px;line-height:1.5">S/O/D 점수·조치사항·필드 정합성을 AI가 한 번 더 검토해 품질을 높입니다. 대신 분석 시간과 API 비용이 약 2배로 늘어납니다.</p>
+    </div>
     <div id="apiCurrentStatus" style="font-size:11px;color:var(--text3);margin-top:-4px;margin-bottom:10px"></div>
     <a href="https://console.anthropic.com/settings/keys" target="_blank"
        style="font-size:11px;color:var(--accent2);text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-bottom:14px">
@@ -1341,6 +1348,55 @@ async function fetchClaudeMessages(bodyObj, signal){
     }
   }
   return res;
+}
+// Claude Messages API를 스트리밍 호출해 SSE를 직접 파싱하고, 누적 텍스트를 PFMEA/CP JSON 스키마로 파싱해 반환하는 공용 헬퍼.
+// onProgress(len)로 지금까지 누적된 문자 수(텍스트+thinking)를 전달하므로, 호출 측에서 원하는 구간(%)에 자유롭게 매핑할 수 있다.
+// (1차 생성과 2차 자체검증 모두 이 헬퍼를 공유해 SSE 파싱/JSON 복구 로직이 중복되지 않도록 함)
+async function streamClaudeJson(bodyObj, signal, onProgress){
+  const res=await fetchClaudeMessages(bodyObj, signal);
+  if(!res.ok){
+    let detail='';
+    try{ const e=await res.json(); detail=e?.error?.message||''; }catch(_){}
+    const err=new Error(detail||`HTTP ${res.status}`);
+    err.status=res.status;
+    throw err;
+  }
+  const reader=res.body.getReader();
+  const decoder=new TextDecoder();
+  let buf='', text='', thinkingLen=0, wasTruncated=false;
+  while(true){
+    const {done,value}=await reader.read();
+    if(done) break;
+    buf+=decoder.decode(value,{stream:true});
+    const lines=buf.split('\n');
+    buf=lines.pop();
+    for(const line of lines){
+      if(!line.startsWith('data:')) continue;
+      const payload=line.slice(5).trim();
+      if(!payload||payload==='[DONE]') continue;
+      let evt;
+      try{ evt=JSON.parse(payload); }catch(_){ continue; }
+      if(evt.type==='content_block_delta'&&evt.delta?.text){
+        text+=evt.delta.text;
+        if(onProgress) onProgress(text.length+thinkingLen);
+      }else if(evt.type==='content_block_delta'&&evt.delta?.thinking){
+        thinkingLen+=evt.delta.thinking.length;
+        if(onProgress) onProgress(text.length+thinkingLen);
+      }else if(evt.type==='message_delta'&&evt.delta?.stop_reason==='max_tokens'){
+        wasTruncated=true;
+      }
+    }
+  }
+  let clean=text.replace(/```json\n?/g,'').replace(/```/g,'').trim();
+  clean=repairJson(clean);
+  let parsed;
+  try{
+    parsed=JSON.parse(clean);
+  }catch(je){
+    parsed=extractPartialJson(clean);
+    if(!parsed.pfmea.length && !parsed.cp.length) throw new Error('JSON 파싱 실패 — 재시도해주세요');
+  }
+  return {parsed, wasTruncated, rawText:text};
 }
 let procs = [];
 let cur = -1;
@@ -1733,6 +1789,14 @@ function saveSelectedModel(model){
   if(!model) return;
   localStorage.setItem('pfmea_model', model.trim());
 }
+// 2차 자체검증(AI가 1차 PFMEA/CP 결과를 스스로 재검토·수정) — 기본 켜짐. 품질은 올라가지만 분석 시간/API 비용이 약 2배가 됨
+function is2PassEnabled(){
+  const v=localStorage.getItem('pfmea_2pass');
+  return v===null?true:v==='1';
+}
+function setTwoPassEnabled(v){
+  localStorage.setItem('pfmea_2pass', v?'1':'0');
+}
 function inferDrawingMime(file){
   const name=(file.name||'').toLowerCase();
   if(file.type && file.type.trim()) return file.type;
@@ -1758,6 +1822,8 @@ function openApiModal(){
   if(modelInput){
     modelInput.value = currentModel;
   }
+  const twoPassEl = document.getElementById('twoPassToggle');
+  if(twoPassEl) twoPassEl.checked = is2PassEnabled();
   const status = document.getElementById('apiCurrentStatus');
   if(cur){
     const masked = cur.slice(0,12)+'••••••••'+cur.slice(-4);
@@ -3518,6 +3584,43 @@ Control Plan 작성 규칙 — 공정흐름도/자동검사/관리분담:
 
 응답 길이 관리(중요): pfmea와 cp 배열을 모두 완성하는 것이 각 필드를 장황하게 쓰는 것보다 우선이다. 고장모드가 많거나 설명이 길어져 응답이 끊길 위험이 있으면, action/react 등 서술형 필드를 간결하게 줄여서라도 pfmea 최소 개수와 cp 배열을 반드시 끝까지(JSON 마지막 '}'까지) 포함시켜라. pfmea만 길게 쓰고 cp 배열을 아예 빠뜨리는 것은 절대 금지 — cp가 비면 Control Plan 결과물 자체가 만들어지지 않는다.`;
 
+/* ─ 2차 자체검증(Self-Review) — 1차로 생성된 PFMEA/CP를 AI가 한 번 더 심사하여 점수·필드 정합성·구체성을 스스로 교정 ─ */
+const REVIEW_SYSTEM = `당신은 AIAG-VDA PFMEA 5th Edition 및 IATF 16949 Control Plan 심사관입니다. 아래에 특정 공정에 대해 1차로 작성된 PFMEA/Control Plan 초안(JSON)이 주어집니다. 이 초안을 아래 기준으로 냉정하게 재검토하고, 문제가 있는 필드는 직접 수정한 최종본을 반환하세요.
+
+검토 기준:
+1. S/O/D 점수가 현실적인가 — 근거 없이 과도하게 높거나(특히 안전·법규 직결이 아닌데 S 9-10) 낮지 않은가
+2. S,O,D 중 7점 이상인데 action이 비어있거나 "~을 검토한다"처럼 추상적이지 않은가 — 있다면 구체적 실행 조치로 다시 작성
+3. Control Plan의 featProd(제품 특성)와 featProc(공정 특성)가 실제로 다른 관점(결과 vs 그 결과를 만드는 공정조건)으로 작성되었는가, 동일 문구·동의어 치환에 그치지 않는가
+4. 필드 간 정합성 — char가 SC/CC인데 fp가 비어있거나, auto='○'인데 gage/method에 자동설비 근거가 없는 등 불일치가 없는가
+5. 고장모드가 이 공정의 실제 기능/특성에 맞는 구체적인 내용인가, 다른 공정에도 그대로 쓸 수 있는 뻔하고 일반적인 내용은 아닌가
+6. fmRef가 실제로 관련된 고장모드 인덱스를 정확히 가리키는가
+
+수정이 필요 없는 필드는 그대로 유지하고, 문제가 있는 필드만 고쳐서 pfmea/cp 배열 전체를 완전한 형태로 다시 반환하세요. 배열의 항목 수·순서를 임의로 줄이지 마세요(필요하면 항목 추가는 가능). 응답은 반드시 아래와 동일한 JSON 스키마로만, 다른 설명 텍스트 없이 출력하세요:
+
+{
+  "pfmea": [
+    {"fm":"...","effect":"...","s":정수,"cause":"...","o":정수,"ctrlP":"...","ctrlD":"...","detectMethod":"...","d":정수,"action":"..."}
+  ],
+  "cp": [
+    {"pn":"...","flow":"MAIN|SUB|외주","mach":"...","char":"SC|CC|일반","featProd":"...","featProc":"...","fmRef":[0,1],"spec":"...","auto":"○|''","gage":"...","fp":"○|''","size":"...","freq":"...","method":"...","respProd":"○|''","respMat":"○|''","respQC":"○|''","react":"...","note":"..."}
+  ]
+}`;
+function buildReviewPrompt(p,draftPfmea,draftCp){
+  return `검토 대상 공정 정보:
+- 공정번호: ${p.num||'N/A'}
+- 공정명: ${p.name}
+- 공정 기능/특성: ${p.func}
+- 장비 타입: ${p.equipType==='manual'?'Manual(수동)':'AUTO(자동설비)'}
+
+[1차 초안 — pfmea]
+${JSON.stringify(draftPfmea)}
+
+[1차 초안 — cp]
+${JSON.stringify(draftCp)}
+
+위 초안을 검토 기준에 따라 재검토하고 최종본을 JSON으로 반환하세요.`;
+}
+
 /* ─ JSON repair utilities ─ */
 function repairJson(str){
   // 잘린 JSON 자동 복구: 열린 괄호/문자열 닫기
@@ -3686,8 +3789,10 @@ ${drws.length?'\n첨부된 도면/이미지의 치수, 규격, 형상을 파악�
 
 async function analyze(idx){
   const p=procs[idx];
-  const steps=['잠재 고장모드 도출 중...','고장 영향 및 심각도(S) 평가 중...','잠재 원인 및 발생도(O) 분석 중...','현행 관리방법 및 검출도(D) 평가 중...','권장 조치사항 도출 중...','Control Plan 항목 생성 중...'];
-  const ESTIMATED_TOKENS=9000; // 진행률 계산용 예상 출력 토큰 (thinking 포함, 실측 아님, 체감용 추정치)
+  const twoPass=is2PassEnabled();
+  const steps=['잠재 고장모드 도출 중...','고장 영향 및 심각도(S) 평가 중...','잠재 원인 및 발생도(O) 분석 중...','현행 관리방법 및 검출도(D) 평가 중...','권장 조치사항 도출 중...','Control Plan 항목 생성 중...'].concat(twoPass?['AI 자체 검증(2차) 중...']:[]);
+  const ESTIMATED_TOKENS=9000; // 1차 진행률 계산용 예상 출력 토큰 (thinking 포함, 실측 아님, 체감용 추정치)
+  const REVIEW_ESTIMATED_TOKENS=7000; // 2차 검증 진행률 계산용 예상 출력 토큰
   const abortCtrl=new AbortController();
   _procAbortCtrls[idx]=abortCtrl;
 
@@ -3728,87 +3833,61 @@ async function analyze(idx){
     content.push({type:'text',text:buildPrompt(p)});
 
     const model=getDrawingAnalysisModel();
-    const res=await fetchClaudeMessages(
-      {
-        model,
-        max_tokens:24000,
-        thinking:{type:'adaptive',display:'summarized'},
-        system:SYSTEM_PROMPT,
-        messages:[{role:'user',content}],
-        stream:true
-      },
-      abortCtrl.signal
-    );
-    if(!res.ok){
-      let detail='';
-      try{ const e=await res.json(); detail=e?.error?.message?(' - '+e.error.message):''; }catch(_){ }
-      if(res.status===400 && /model|unsupported|invalid/i.test(detail)){
-        throw new Error(`Anthropic 모델이 허용되지 않습니다. 현재 사용 모델: ${model}. API 키 권한/모델 접근 권한을 확인하거나 다른 지원 모델로 재시도하세요.${detail}`);
+    // 1차 생성 — 진행률은 0~(2차 적용 시 60%, 미적용 시 96%) 구간에 매핑
+    const pass1Cap=twoPass?60:96;
+    let draft;
+    try{
+      draft=await streamClaudeJson(
+        {model,max_tokens:24000,thinking:{type:'adaptive',display:'summarized'},system:SYSTEM_PROMPT,messages:[{role:'user',content}],stream:true},
+        abortCtrl.signal,
+        len=>setPct(Math.min(pass1Cap,Math.round((len/4/ESTIMATED_TOKENS)*pass1Cap)))
+      );
+    }catch(err){
+      if(err.status===400 && /model|unsupported|invalid/i.test(err.message||'')){
+        throw new Error(`Anthropic 모델이 허용되지 않습니다. 현재 사용 모델: ${model}. API 키 권한/모델 접근 권한을 확인하거나 다른 지원 모델로 재시도하세요. - ${err.message}`);
       }
-      const e=await res.json().catch(()=>({error:{message:`HTTP ${res.status}`}}));
-      throw new Error(e.error?.message||`HTTP ${res.status}`);
+      throw err;
     }
+    setPct(pass1Cap);
 
-    // ─ SSE 스트림 직접 파싱하여 누적 텍스트 길이로 진행률(%) 추정 ─
-    // (thinking 단계에서도 델타가 오므로 thinking+text 길이를 합산해야
-    //  "생각 중"인 동안 진행률이 멈춰있는 것처럼 보이지 않는다)
-    const reader=res.body.getReader();
-    const decoder=new TextDecoder();
-    let buf='', text='', thinkingLen=0, wasTruncated=false;
-    while(true){
-      const {done,value}=await reader.read();
-      if(done) break;
-      buf+=decoder.decode(value,{stream:true});
-      const lines=buf.split('\n');
-      buf=lines.pop();
-      for(const line of lines){
-        if(!line.startsWith('data:')) continue;
-        const payload=line.slice(5).trim();
-        if(!payload||payload==='[DONE]') continue;
-        let evt;
-        try{ evt=JSON.parse(payload); }catch(_){ continue; }
-        if(evt.type==='content_block_delta'&&evt.delta?.text){
-          text+=evt.delta.text;
-          const outputTokens=Math.round((text.length+thinkingLen)/4);
-          const pct=Math.min(96,Math.round((outputTokens/ESTIMATED_TOKENS)*100));
-          setPct(pct);
-        }else if(evt.type==='content_block_delta'&&evt.delta?.thinking){
-          thinkingLen+=evt.delta.thinking.length;
-          const outputTokens=Math.round((text.length+thinkingLen)/4);
-          const pct=Math.min(96,Math.round((outputTokens/ESTIMATED_TOKENS)*100));
-          setPct(pct);
-        }else if(evt.type==='message_delta'&&evt.delta?.stop_reason==='max_tokens'){
-          wasTruncated=true;
+    const draftPfmea=draft.parsed.pfmea||[];
+    const draftCp=draft.parsed.cp||[];
+    let finalPfmea=draftPfmea, finalCp=draftCp, reviewApplied=false, reviewFailed=false;
+
+    // 2차 자체검증 — 1차 결과를 같은 모델에 다시 보여주고 AIAG-VDA 기준으로 재검토·수정하게 함
+    if(twoPass && draftPfmea.length){
+      try{
+        const review=await streamClaudeJson(
+          {model,max_tokens:24000,thinking:{type:'adaptive',display:'summarized'},system:REVIEW_SYSTEM,messages:[{role:'user',content:[{type:'text',text:buildReviewPrompt(p,draftPfmea,draftCp)}]}],stream:true},
+          abortCtrl.signal,
+          len=>setPct(Math.min(96,pass1Cap+Math.round((len/4/REVIEW_ESTIMATED_TOKENS)*(96-pass1Cap))))
+        );
+        if(review.parsed.pfmea && review.parsed.pfmea.length){
+          finalPfmea=review.parsed.pfmea;
+          finalCp=review.parsed.cp&&review.parsed.cp.length?review.parsed.cp:draftCp;
+          reviewApplied=true;
         }
+      }catch(reviewErr){
+        console.error('2차 자체검증 실패, 1차 결과를 사용합니다:',reviewErr);
+        reviewFailed=true;
       }
     }
     setPct(99);
 
-    let clean=text.replace(/```json\n?/g,'').replace(/```/g,'').trim();
-
-    // JSON이 잘렸을 경우 자동 복구
-    clean = repairJson(clean);
-
-    let parsed;
-    try{
-      parsed=JSON.parse(clean);
-    }catch(je){
-      // 복구 실패 시 pfmea/cp 각각 추출 시도
-      parsed = extractPartialJson(clean);
-      if(!parsed.pfmea.length) throw new Error('JSON 파싱 실패 — 재시도해주세요');
-    }
-    setPct(100);
-    procs[idx].pfmea=parsed.pfmea||[];
-    procs[idx].cp=parsed.cp||[];
+    procs[idx].pfmea=finalPfmea;
+    procs[idx].cp=finalCp;
     if(procs[idx].flowLane) procs[idx].cp.forEach(r=>r.flow=procs[idx].flowLane);
     linkFmAndCp(procs[idx].pfmea,procs[idx].cp);
     procs[idx].status='done';
     procs[idx].fileData=null;
+    setPct(100);
     renderList(); renderContent(); saveAll();
-    if(wasTruncated || !procs[idx].cp.length){
+    if(draft.wasTruncated || !procs[idx].cp.length){
       toast(`${p.name} 분석 완료 — 응답이 길어 Control Plan이 비어있거나 일부만 생성되었을 수 있습니다. 필요하면 AI 재분석을 눌러주세요`,'err');
+    }else if(reviewFailed){
+      toast(`${p.name} 분석 완료 (2차 검증 실패 — 1차 결과 사용) — ${procs[idx].pfmea.length}개 고장모드`,'err');
     }else{
-      toast(`${p.name} 분석 완료 — ${procs[idx].pfmea.length}개 고장모드`,'ok');
+      toast(`${p.name} 분석 완료${reviewApplied?' (2차 자체검증 반영)':''} — ${procs[idx].pfmea.length}개 고장모드`,'ok');
     }
   }catch(e){
     const aborted=e.name==='AbortError';
