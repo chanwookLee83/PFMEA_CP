@@ -17,6 +17,7 @@
 <!-- External libs -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 
 <style>
 /* ── Reset & Variables ─────────────────────────────── */
@@ -849,6 +850,10 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
         <button class="tabx" id="t-cp" onclick="switchTab('cp')">Control Plan</button>
       </div>
       <div class="export-grp">
+        <button class="btn" id="btnTpl" onclick="openTplModal()" title="엑셀 양식(PFMEA/CP) 등록" style="position:relative">
+          <i class="ti ti-table-import" style="font-size:13px"></i> 양식
+          <span class="rules-badge" id="tplBadge" style="position:absolute;top:3px;right:3px"></span>
+        </button>
         <button class="btn" id="btnXls" onclick="exportExcel()" disabled><i class="ti ti-file-spreadsheet" style="font-size:13px"></i> Excel</button>
         <button class="btn" id="btnReset" onclick="resetProject()" title="프로젝트 초기화" style="padding:5px 9px;color:var(--danger);border-color:rgba(220,38,38,.3)"><i class="ti ti-trash" style="font-size:14px"></i></button>
         <button class="btn" id="btnApiKey" onclick="openApiModal()" title="API 키 변경" style="padding:5px 9px"><i class="ti ti-key" style="font-size:14px"></i></button>
@@ -1151,6 +1156,28 @@ label.drawing-check-item input{width:auto;accent-color:var(--accent);cursor:poin
       <div class="modal-actions" style="margin-top:8px">
         <button class="btn primary" onclick="addUser()"><i class="ti ti-plus" style="font-size:13px"></i> 추가</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Excel 양식 등록 Modal ── -->
+<div class="backdrop" id="tplModal">
+  <div class="modal" style="width:760px">
+    <div class="modal-head">
+      <h3><i class="ti ti-table-import" style="color:var(--accent);margin-right:7px"></i>엑셀 양식 등록</h3>
+      <button onclick="closeTplModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <p style="font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:6px">
+      회사/고객사 PFMEA·Control Plan 양식(.xlsx)을 등록하면, Excel 내보내기 시 그 양식의
+      서식(테두리·색·병합·로고)을 그대로 유지한 채 분석 데이터를 채워 다운로드합니다.
+      양식을 등록하지 않으면 기존 기본 양식(유라)으로 내보냅니다.
+    </p>
+    <p style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:14px">
+      양식은 이 브라우저에만 저장되며 외부로 전송되지 않습니다. (열 자동 매핑에만 헤더 텍스트가 AI로 전송됩니다.)
+    </p>
+    <div id="tplSections"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeTplModal()">닫기</button>
     </div>
   </div>
 </div>
@@ -3914,8 +3941,8 @@ function stopAnalysis(idx){
   if(ctrl) ctrl.abort();
 }
 
-/* ─ Export Excel ─ */
-function exportExcel(){
+/* ─ Export Excel (기본: 유라 양식) ─ */
+function exportExcelDefault(){
   if(!procs.some(p=>p.status==='done')){ toast('분석된 공정이 없습니다','err'); return; }
   const wb=XLSX.utils.book_new();
   const pn=V('partNum')||'', pname=V('partName')||'';
@@ -4142,6 +4169,542 @@ function exportExcel(){
   toast('Excel 다운로드 완료 — 유라 양식','ok');
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   사용자 양식(.xlsx) 기반 Excel 내보내기
+   ────────────────────────────────────────────────────────────────
+   사용자가 자기 회사/고객사 PFMEA·CP 양식을 등록하면, ExcelJS로 그
+   양식 원본을 열어 서식(테두리·색·병합·로고)을 유지한 채 분석 데이터를
+   헤더에 맞는 열로 채워 다운로드한다. 열↔필드 매핑은 Claude 자동 배정
+   + 사용자 수동 수정. 양식 미등록 시 exportExcelDefault()로 폴백.
+   ══════════════════════════════════════════════════════════════════ */
+
+const TPL_FIELDS={
+  pfmea:[
+    {key:'proc',        label:'공정/기능',        required:true,  syn:['공정의기능','공정기능','공정명','기능','function','공정/기능','item','process']},
+    {key:'fm',          label:'잠재적 고장형태',  required:true,  syn:['고장형태','고장의형태','failuremode','잠재적고장','고장모드']},
+    {key:'effect',      label:'고장의 잠재적 영향',required:false, syn:['잠재적영향','고장의영향','영향','effect','effectsoffailure']},
+    {key:'s',           label:'심각도(S)',        required:true,  syn:['심각도','severity','sev']},
+    {key:'special',     label:'특별특성(SC/CC)',  required:false, syn:['특별특성','특수특성','classification','특성분류','specialcharacteristic']},
+    {key:'cause',       label:'고장의 잠재적 원인',required:false, syn:['잠재적원인','고장의원인','원인','cause','mechanism']},
+    {key:'o',           label:'발생도(O)',        required:false, syn:['발생도','occurrence']},
+    {key:'ctrlP',       label:'현공정관리-예방',  required:false, syn:['예방','현공정관리예방','prevention','현재예방','예방관리']},
+    {key:'ctrlD',       label:'현공정관리-검출',  required:false, syn:['검출관리','현공정관리검출','detection','현재검출','관리검출']},
+    {key:'detectMethod',label:'검출 방법',        required:false, syn:['검출방법','확인방법','detectionmethod']},
+    {key:'d',           label:'검출도(D)',        required:false, syn:['검출도','detection']},
+    {key:'rpn',         label:'RPN',              required:false, syn:['rpn','위험우선순위','riskpriority']},
+    {key:'action',      label:'권고 조치사항',    required:false, syn:['권고조치','조치사항','recommendedaction','action','개선대책','권고조치사항']}
+  ],
+  cp:[
+    {key:'pn',       label:'공정 번호',       required:true,  syn:['공정번호','공정no','processno','process번호']},
+    {key:'flow',     label:'공정 구분(텍스트)',required:false, syn:['공정구분','흐름구분']},
+    {key:'flowOut',  label:'공정흐름도-외주', required:false, syn:['외주','도급','outsourc']},
+    {key:'flowSub',  label:'공정흐름도-SUB',  required:false, syn:['sub','서브']},
+    {key:'flowMain', label:'공정흐름도-MAIN', required:false, syn:['main','메인','본공정']},
+    {key:'procName', label:'공정명',          required:true,  syn:['공정명','processname','operationname','operation']},
+    {key:'mach',     label:'설비명',          required:false, syn:['설비명','설비','장비','machine','equipment']},
+    {key:'itemNo',   label:'관리항목 NO',     required:false, syn:['관리항목no','관리항목','characteristicno']},
+    {key:'featProd', label:'제품 특성',       required:false, syn:['제품특성','productcharacteristic']},
+    {key:'featProc', label:'공정 특성',       required:false, syn:['공정특성','processcharacteristic']},
+    {key:'char',     label:'특별 특성',       required:false, syn:['특별특성','특수특성','특성분류','specialchar']},
+    {key:'fp',       label:'F/P 대상여부',    required:false, syn:['대상여부','풀프루프','포카요케','foolproof','pokayoke']},
+    {key:'auto',     label:'자동 검사',       required:false, syn:['자동검사','autoinspect','automatic']},
+    {key:'spec',     label:'관리기준-규격',   required:false, syn:['규격','관리기준','specification','tolerance']},
+    {key:'gage',     label:'관리기준-확인방법',required:false, syn:['확인방법','측정방법','측정기법','게이지','gauge','measurement']},
+    {key:'freq',     label:'관리기준-주기',   required:false, syn:['주기','샘플주기','frequency','sample']},
+    {key:'method',   label:'관리방안',        required:false, syn:['관리방안','관리방법','controlmethod']},
+    {key:'respProd', label:'관리분담-생산',   required:false, syn:['생산','production','제조']},
+    {key:'respMat',  label:'관리분담-자재',   required:false, syn:['자재','material','구매']},
+    {key:'respQC',   label:'관리분담-QC',     required:false, syn:['qc','품질','quality','검사원']},
+    {key:'react',    label:'이상 발생시 조치사항',required:false, syn:['이상발생시조치','조치사항','반응계획','reactionplan','대응']},
+    {key:'note',     label:'비고',            required:false, syn:['비고','remark','note','참고']}
+  ]
+};
+
+let _tplState={pfmea:null, cp:null};
+
+/* ─ 열문자 ⇄ 번호 ─ */
+function colLetterToNum(L){ let n=0; for(const ch of String(L).toUpperCase()) if(ch>='A'&&ch<='Z') n=n*26+(ch.charCodeAt(0)-64); return n; }
+function colNumToLetter(n){ let s=''; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=(n-m-1)/26; } return s; }
+
+/* ─ ExcelJS 셀 값 → 텍스트 ─ */
+function tplCellText(v){
+  if(v==null) return '';
+  if(typeof v==='string') return v;
+  if(typeof v==='number'||typeof v==='boolean') return String(v);
+  if(v instanceof Date) return v.toISOString().slice(0,10);
+  if(typeof v==='object'){
+    if(Array.isArray(v.richText)) return v.richText.map(t=>t.text||'').join('');
+    if(v.text!=null) return tplCellText(v.text);
+    if(v.result!=null) return tplCellText(v.result);
+    if(v.formula!=null||v.sharedFormula!=null) return '';
+    if(v.hyperlink!=null&&v.text!=null) return String(v.text);
+  }
+  return String(v);
+}
+
+/* ─ 양식 시트 → 앞 20행 텍스트 그리드 (병합 슬레이브 셀은 공란: 전폭 병합된 제목행이
+     모든 열 헤더에 섞여 들어가는 것을 방지) ─ */
+function tplGridOf(ws){
+  const maxR=Math.min(Math.max(ws.rowCount||0,1),20);
+  const maxC=Math.min(Math.max(ws.columnCount||0,1),50);
+  const g=[];
+  for(let r=1;r<=maxR;r++){
+    const arr=[];
+    for(let c=1;c<=maxC;c++){
+      const cell=ws.getCell(r,c);
+      arr.push((cell.master===cell)?tplCellText(cell.value):'');
+    }
+    g.push(arr);
+  }
+  return g;
+}
+
+/* ─ 헤더 행 / 데이터 시작 행 자동 감지 ─
+   headerRow = 비어있지 않은 셀이 가장 많은 행.
+   dataStartRow = 그 아래에서 텍스트가 남아있는 보조 헤더행(최대 3행)을 건너뛴 첫 빈 행. */
+function tplLayoutFromGrid(grid){
+  let best=1,bc=-1;
+  grid.forEach((arr,i)=>{
+    const cnt=arr.filter(x=>x&&String(x).trim()).length;
+    if(cnt>=bc){ bc=cnt; best=i+1; }
+  });
+  const headerRow=best;
+  let dataStartRow=headerRow+1;
+  for(let idx=headerRow; idx<grid.length && idx<headerRow+3; idx++){
+    const cnt=(grid[idx]||[]).filter(x=>x&&String(x).trim()).length;
+    if(cnt===0){ dataStartRow=idx+1; break; }
+    dataStartRow=idx+2;
+  }
+  return {headerRow, dataStartRow};
+}
+
+/* ─ 그리드 + 헤더행 → 열 목록(1행~헤더행 텍스트 결합) ─ */
+function tplColumnsFromGrid(grid, headerRow){
+  const colCount=grid.reduce((m,r)=>Math.max(m,r.length),0);
+  // 헤더행 위쪽에서 셀이 1개뿐인 행(전폭 병합 제목행)은 열 헤더 구성에서 제외
+  const useRow=[];
+  for(let r=0;r<headerRow && r<grid.length;r++){
+    const n=(grid[r]||[]).filter(x=>x&&String(x).trim()).length;
+    useRow[r]=!(n<=1 && colCount>3 && r+1<headerRow);
+  }
+  const columns=[];
+  for(let c=0;c<colCount;c++){
+    const parts=[];
+    for(let r=0;r<headerRow && r<grid.length;r++){
+      if(!useRow[r]) continue;
+      const t=String((grid[r]||[])[c]||'').trim();
+      if(t && !parts.includes(t)) parts.push(t);
+    }
+    columns.push({col:colNumToLetter(c+1), header:parts.join(' ')});
+  }
+  while(columns.length && !columns[columns.length-1].header) columns.pop();
+  return columns;
+}
+
+/* ─ 키워드 기반 열 매핑 (오프라인 폴백, 결정론적) ─ */
+function tplKeywordMap(kind, columns){
+  const fields=TPL_FIELDS[kind];
+  const norm=s=>String(s||'').replace(/\s+/g,'').toLowerCase();
+  const pairs=[];
+  fields.forEach(f=>{
+    columns.forEach(col=>{
+      const h=norm(col.header); if(!h) return;
+      let sc=0;
+      f.syn.forEach(sy=>{ const n=norm(sy); if(n.length>=2 && h.includes(n)) sc=Math.max(sc,n.length); });
+      if(sc>0) pairs.push({f:f.key, col:col.col, sc});
+    });
+  });
+  pairs.sort((a,b)=>b.sc-a.sc);
+  const map={}, used=new Set();
+  pairs.forEach(p=>{ if(map[p.f]||used.has(p.col)) return; map[p.f]=p.col; used.add(p.col); });
+  return map;
+}
+
+/* ─ Claude 자동 열 매핑 ─ */
+async function tplAiMap(kind, columns){
+  if(!getKey()) return null;
+  const fields=TPL_FIELDS[kind];
+  const colList=columns.map(c=>`${c.col}: ${c.header||'(빈 헤더)'}`).join('\n');
+  const fieldList=fields.map(f=>`- ${f.key}: ${f.label}`).join('\n');
+  const sys=`너는 제조 품질문서(${kind==='pfmea'?'PFMEA':'Control Plan'}) 엑셀 양식의 열 헤더를 표준 필드에 매핑하는 도구다. 오직 JSON 객체 하나만 출력한다.`;
+  const user=`엑셀 양식의 열 목록 (열문자: 헤더텍스트, 여러 헤더행이 결합됨):\n${colList}\n\n아래 표준 필드마다 대응되는 "열문자"를 골라 JSON으로 반환하라. 대응 열이 없으면 그 필드는 생략한다.\n\n표준 필드:\n${fieldList}\n\n출력 예: {"fm":"C","effect":"D","s":"E"}\nJSON만 출력.`;
+  try{
+    const res=await fetchClaudeMessages({ model:getDrawingAnalysisModel(), max_tokens:900, system:sys, messages:[{role:'user',content:user}] });
+    if(!res.ok) return null;
+    const data=await res.json();
+    let txt=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    txt=txt.replace(/```json\n?/g,'').replace(/```/g,'').trim();
+    const m=txt.match(/\{[\s\S]*\}/); if(!m) return null;
+    const obj=JSON.parse(m[0]);
+    const valid=new Set(columns.map(c=>c.col));
+    const out={};
+    fields.forEach(f=>{ const v=obj[f.key]; if(typeof v==='string' && valid.has(v.toUpperCase())) out[f.key]=v.toUpperCase(); });
+    return out;
+  }catch(_){ return null; }
+}
+
+/* ─ 데이터 행 생성 (exportExcelDefault 매핑 로직 재사용) ─ */
+function tplBuildPfmeaRows(){
+  const rows=[];
+  procs.forEach(p=>{
+    (p.pfmea||[]).forEach(row=>{
+      let sc=''; if(row.s>=9) sc='SC'; else if(row.s>=7) sc='CC';
+      rows.push({
+        proc:p.name||'', fm:row.fm||'', effect:row.effect||'',
+        s:row.s||'', special:sc, cause:row.cause||'', o:row.o||'',
+        ctrlP:row.ctrlP||row.ctrl||'', ctrlD:row.ctrlD||'',
+        detectMethod:row.detectMethod||'', d:row.d||'',
+        rpn:rpn(row), action:row.action||''
+      });
+    });
+  });
+  return rows;
+}
+function tplBuildCpRows(){
+  const rows=[]; let cno=1;
+  procs.forEach(p=>{
+    (p.cp||[]).forEach(c=>{
+      const flow=c.flow||'MAIN';
+      rows.push({
+        pn:c.pn||p.num||'', flow:flow,
+        flowOut:flow==='외주'?'○':'', flowSub:flow==='SUB'?'○':'',
+        flowMain:(flow!=='외주'&&flow!=='SUB')?'○':'',
+        procName:p.name||'', mach:c.mach||'', itemNo:cno++,
+        featProd:c.featProd||c.feat||'', featProc:c.featProc||c.feat||'',
+        char:c.char||'',
+        fp:(c.fp!==undefined?c.fp:((c.char==='SC'||c.char==='CC')?'○':'')),
+        auto:c.auto||'', spec:c.spec||'', gage:c.gage||'', freq:c.freq||'',
+        method:c.method||'',
+        respProd:(c.respProd!==undefined?c.respProd:'○'),
+        respMat:c.respMat||'',
+        respQC:(c.respQC!==undefined?c.respQC:'○'),
+        react:c.react||'', note:c.note||''
+      });
+    });
+  });
+  return rows;
+}
+
+/* ─ "A1:B1" 병합 참조 파싱 ─ */
+function tplParseRef(ref){
+  const m=String(ref).match(/^([A-Za-z]+)(\d+):([A-Za-z]+)(\d+)$/);
+  if(!m) return null;
+  return {left:colLetterToNum(m[1]), top:+m[2], right:colLetterToNum(m[3]), bottom:+m[4]};
+}
+function tplThinBorder(){ const s={style:'thin',color:{argb:'FFBFBFBF'}}; return {top:s,left:s,bottom:s,right:s}; }
+
+/* ─ 공정흐름도 시트 추가 (ExcelJS) ─ */
+function tplAppendFlowSheet(wb){
+  const GLYPH={'tri-up':'△','circle':'○','diamond':'◇','combo':'◎','tri-down':'▽'};
+  const seq=procs.slice().sort((a,b)=>procNumKey(a)-procNumKey(b));
+  if(!seq.length) return;
+  const mainList=seq.filter(p=>procFlowCol(p)==='MAIN');
+  const fb=!mainList.length;
+  const mainSet=new Set(fb?seq:mainList);
+  let ws;
+  try{ ws=wb.addWorksheet('공정흐름도'); }catch(_){ try{ ws=wb.addWorksheet('공정흐름도(2)'); }catch(__){ return; } }
+  ws.columns=[{width:6},{width:10},{width:8},{width:14},{width:22},{width:18},{width:26},{width:12}];
+  const head=ws.addRow(['순번','공정번호','구분','기호','공정명','하위자재/부품명','다음 연결 공정','비고']);
+  head.font={bold:true};
+  head.eachCell(c=>{ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEFEFEF'}}; c.border=tplThinBorder(); });
+  seq.forEach((p,i)=>{
+    const isMain=mainSet.has(p);
+    const col=fb?'MAIN':procFlowCol(p);
+    const symKey=procFlowSymbol(p);
+    const sym=FLOW_SYMBOLS[symKey]||{shape:'circle',label:''};
+    const next=seq[i+1];
+    const showNg=(symKey==='inspect'||symKey==='work_inspect')&&isMain;
+    const row=ws.addRow([ i+1, p.num||'', isMain?'MAIN':col,
+      `${GLYPH[sym.shape]||''} ${sym.label}`, p.name||'',
+      (!isMain&&p.subMaterial)?p.subMaterial:'',
+      next?`→ ${next.num||''} ${next.name||''}`:'(마지막 공정)',
+      showNg?'NG → SCRAP':'' ]);
+    row.eachCell(c=>{ c.border=tplThinBorder(); });
+  });
+}
+
+/* ─ Blob 다운로드 ─ */
+function downloadBlob(blob, filename){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+
+/* ─ 양식 하나를 채워 다운로드 ─ */
+async function tplExport(kind, tpl, appendFlow){
+  if(typeof ExcelJS==='undefined') throw new Error('ExcelJS 라이브러리 로드 실패 (네트워크 확인)');
+  const mapping=tpl.mapping||{};
+  const fields=TPL_FIELDS[kind];
+  const missReq=fields.filter(f=>f.required && !mapping[f.key]).map(f=>f.label);
+  if(missReq.length) throw new Error(`${kind==='pfmea'?'PFMEA':'CP'} 양식 필수 열 매핑 누락: ${missReq.join(', ')}`);
+
+  const wb=new ExcelJS.Workbook();
+  await wb.xlsx.load(tpl.buf);
+  const ws=wb.getWorksheet(tpl.sheetName)||wb.worksheets[0];
+  if(!ws) throw new Error('양식 시트를 찾을 수 없습니다');
+
+  const dataStart=tpl.dataStartRow||((tpl.headerRow||1)+1);
+  const rows=(kind==='pfmea'?tplBuildPfmeaRows():tplBuildCpRows());
+  if(!rows.length) throw new Error('내보낼 데이터가 없습니다');
+
+  // 서식/행높이 원본 = dataStart부터 아래로 훑어 테두리가 있는 첫 행 (없으면 dataStart)
+  const hasBorder=cell=>cell.border && (cell.border.top||cell.border.left||cell.border.bottom||cell.border.right);
+  let styleRowNum=dataStart;
+  for(let rr=dataStart; rr<=dataStart+12; rr++){
+    let found=false;
+    ws.getRow(rr).eachCell({includeEmpty:true},cell=>{ if(hasBorder(cell)) found=true; });
+    if(found){ styleRowNum=rr; break; }
+  }
+  const srcRow=ws.getRow(styleRowNum);
+  const srcStyles={};
+  srcRow.eachCell({includeEmpty:true},(cell,cn)=>{ srcStyles[cn]=cell.style; });
+  const srcHeight=srcRow.height;
+
+  // 가로 병합 — 데이터 영역 첫 6행 중 하나라도 걸치는 병합 스팬 채택 (원인 E:F, 권고 N:O 등)
+  const merges=(ws.model && ws.model.merges)||[];
+  const hMergeMap={};
+  merges.forEach(ref=>{
+    const m=tplParseRef(ref); if(!m) return;
+    if(m.top===m.bottom && m.top>=dataStart && m.top<=dataStart+6 && m.left!==m.right) hMergeMap[m.left+':'+m.right]={c1:m.left,c2:m.right};
+  });
+  const hMerges=Object.values(hMergeMap);
+
+  const mapNums={};
+  Object.keys(mapping).forEach(k=>{ if(mapping[k]) mapNums[k]=colLetterToNum(mapping[k]); });
+
+  rows.forEach((rec,i)=>{
+    const r=dataStart+i;
+    const row=ws.getRow(r);
+    fields.forEach(f=>{
+      const cn=mapNums[f.key]; if(!cn) return;
+      let val=rec[f.key];
+      const cell=ws.getCell(r,cn);
+      cell.value=(val===''||val==null?null:val);
+      if(srcStyles[cn]){ try{ cell.style=JSON.parse(JSON.stringify(srcStyles[cn])); }catch(_){} }
+    });
+    if(srcHeight) row.height=srcHeight;
+    hMerges.forEach(hm=>{ try{ ws.mergeCells(r,hm.c1,r,hm.c2); }catch(_){} });
+  });
+
+  // 세로 병합 — 연속 동일값 (공정/기능, 공정번호·공정명)
+  const vKeys=(kind==='pfmea'?['proc']:['pn','procName']);
+  vKeys.forEach(k=>{
+    const cn=mapNums[k]; if(!cn) return;
+    const vals=rows.map((_,i)=>String(ws.getCell(dataStart+i,cn).value??''));
+    let s=0;
+    for(let i=1;i<=vals.length;i++){
+      if(i===vals.length || vals[i]!==vals[s]){
+        if(i-s>1 && vals[s]){ try{ ws.mergeCells(dataStart+s,cn,dataStart+i-1,cn); }catch(_){} }
+        s=i;
+      }
+    }
+  });
+
+  if(appendFlow) tplAppendFlowSheet(wb);
+
+  const out=await wb.xlsx.writeBuffer();
+  const pn=(V('partNum')||'유라').replace(/[\\\/:*?"<>|]/g,'_');
+  const ymd=new Date().toISOString().slice(0,10).replace(/-/g,'');
+  downloadBlob(new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
+    `${pn}_${kind==='pfmea'?'PFMEA':'CP'}_${ymd}.xlsx`);
+}
+
+/* ─ Excel 내보내기 진입점 (양식 우선, 없으면 기본) ─ */
+async function exportExcel(){
+  if(!procs.some(p=>p.status==='done')){ toast('분석된 공정이 없습니다','err'); return; }
+  let tplP=null,tplC=null;
+  try{ [tplP,tplC]=await Promise.all([idbGet('tpl_pfmea'),idbGet('tpl_cp')]); }catch(_){}
+  if(!tplP && !tplC){ exportExcelDefault(); return; }
+  try{
+    if(tplP) await tplExport('pfmea', tplP, true);
+    if(tplC) await tplExport('cp', tplC, false);
+    toast(tplP&&tplC?'Excel 2개 파일 다운로드 완료 — 사용자 양식':'Excel 다운로드 완료 — 사용자 양식','ok');
+  }catch(e){
+    console.error(e);
+    toast('양식 내보내기 실패: '+e.message,'err');
+  }
+}
+
+/* ─ 양식 등록 모달 ─ */
+async function openTplModal(){
+  try{
+    const [p,c]=await Promise.all([idbGet('tpl_pfmea'),idbGet('tpl_cp')]);
+    _tplState.pfmea=p||null; _tplState.cp=c||null;
+  }catch(_){ _tplState={pfmea:null,cp:null}; }
+  renderTplSections();
+  document.getElementById('tplModal').classList.add('open');
+}
+function closeTplModal(){
+  document.getElementById('tplModal').classList.remove('open');
+  updateTplBadge();
+}
+function updateTplBadge(){
+  Promise.all([idbGet('tpl_pfmea'),idbGet('tpl_cp')]).then(([p,c])=>{
+    const b=document.getElementById('tplBadge');
+    if(b) b.className='rules-badge'+((p||c)?' on':'');
+  }).catch(()=>{});
+}
+function tplPersist(kind){
+  const s=_tplState[kind];
+  if(!s) return idbDel('tpl_'+kind).catch(()=>{});
+  return idbSet('tpl_'+kind, {
+    fileName:s.fileName, buf:s.buf, grid:s.grid, sheetNames:s.sheetNames,
+    sheetName:s.sheetName, headerRow:s.headerRow, dataStartRow:s.dataStartRow,
+    columns:s.columns, mapping:s.mapping, savedAt:s.savedAt
+  }).catch(e=>{ console.error(e); toast('양식 저장 실패 (용량 초과?)','err'); });
+}
+
+async function tplOnFile(kind, input){
+  const file=input.files && input.files[0];
+  input.value='';
+  if(!file) return;
+  if(typeof ExcelJS==='undefined'){ toast('ExcelJS 로드 실패 (네트워크 확인)','err'); return; }
+  const setStat=t=>{ const e=document.getElementById('tplStatus_'+kind); if(e) e.textContent=t; };
+  setStat('양식 분석 중…');
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    if(!wb.worksheets.length) throw new Error('시트가 없습니다');
+    const ws=wb.worksheets[0];
+    const grid=tplGridOf(ws);
+    const det=tplLayoutFromGrid(grid);
+    const columns=tplColumnsFromGrid(grid, det.headerRow);
+    setStat('열 자동 매핑 중…');
+    let mapping=tplKeywordMap(kind, columns);
+    const ai=await tplAiMap(kind, columns);
+    if(ai) mapping={...mapping, ...ai};
+    _tplState[kind]={
+      fileName:file.name, buf, grid,
+      sheetNames:wb.worksheets.map(w=>w.name), sheetName:ws.name,
+      headerRow:det.headerRow, dataStartRow:det.dataStartRow,
+      columns, mapping, savedAt:Date.now()
+    };
+    await tplPersist(kind);
+    updateTplBadge();
+    setStat(ai?'완료 (AI 매핑) — 매핑을 확인하세요':'완료 (키워드 매핑) — 매핑을 확인하세요');
+    renderTplSections();
+  }catch(e){
+    console.error(e);
+    setStat('실패: '+e.message);
+    toast('양식 분석 실패: '+e.message,'err');
+  }
+}
+
+function tplSetMap(kind, fkey, col){
+  const s=_tplState[kind]; if(!s) return;
+  s.mapping=s.mapping||{};
+  if(col) s.mapping[fkey]=col; else delete s.mapping[fkey];
+  tplPersist(kind);
+}
+function tplSetRow(kind, which, val){
+  const s=_tplState[kind]; if(!s) return;
+  val=parseInt(val,10); if(isNaN(val)||val<1) return;
+  if(which==='header'){
+    s.headerRow=val;
+    s.columns=tplColumnsFromGrid(s.grid, val);
+    if(s.dataStartRow<=val) s.dataStartRow=val+1;
+  }else{
+    s.dataStartRow=val;
+  }
+  tplPersist(kind);
+  renderTplSections();
+}
+function tplSetSheet(kind, name){
+  const s=_tplState[kind]; if(!s) return;
+  const wb=new ExcelJS.Workbook();
+  wb.xlsx.load(s.buf).then(()=>{
+    const ws=wb.getWorksheet(name)||wb.worksheets[0];
+    s.sheetName=ws.name;
+    s.grid=tplGridOf(ws);
+    const det=tplLayoutFromGrid(s.grid);
+    s.headerRow=det.headerRow; s.dataStartRow=det.dataStartRow;
+    s.columns=tplColumnsFromGrid(s.grid, s.headerRow);
+    s.mapping=tplKeywordMap(kind, s.columns);
+    tplPersist(kind);
+    renderTplSections();
+  }).catch(e=>{ console.error(e); toast('시트 전환 실패','err'); });
+}
+async function tplRunAiMap(kind){
+  const s=_tplState[kind]; if(!s) return;
+  const setStat=t=>{ const e=document.getElementById('tplStatus_'+kind); if(e) e.textContent=t; };
+  if(!getKey()){ setStat('API 키가 없어 AI 매핑을 쓸 수 없습니다 (키워드 매핑 유지)'); return; }
+  setStat('AI 자동 매핑 중…');
+  const ai=await tplAiMap(kind, s.columns);
+  if(ai){
+    s.mapping={...tplKeywordMap(kind, s.columns), ...ai};
+    tplPersist(kind); renderTplSections();
+    setStat('AI 매핑 완료 — 확인하세요');
+  }else{
+    setStat('AI 매핑 실패 (키워드 매핑 유지)');
+  }
+}
+function tplRemove(kind){
+  _tplState[kind]=null;
+  idbDel('tpl_'+kind).catch(()=>{});
+  updateTplBadge();
+  renderTplSections();
+}
+
+function renderTplSections(){
+  const host=document.getElementById('tplSections');
+  if(host) host.innerHTML=tplSectionHtml('pfmea')+tplSectionHtml('cp');
+}
+function tplSectionHtml(kind){
+  const title=kind==='pfmea'?'PFMEA 양식 (갑지)':'Control Plan 양식 (을지)';
+  const s=_tplState[kind];
+  let body;
+  if(!s){
+    body=`<p style="font-size:11.5px;color:var(--text3)">등록된 양식이 없습니다. 위 버튼으로 .xlsx 파일을 선택하세요. (미등록 시 이 시트는 내보내지 않습니다)</p>`;
+  }else{
+    const cols=s.columns||[];
+    const opts=sel=>`<option value="">(없음)</option>`+cols.map(c=>{
+      const lbl=`${c.col}${c.header?' — '+c.header:''}`;
+      return `<option value="${c.col}"${sel===c.col?' selected':''}>${esc(lbl.slice(0,64))}</option>`;
+    }).join('');
+    const mapRows=TPL_FIELDS[kind].map(f=>{
+      const cur=(s.mapping||{})[f.key]||'';
+      return `<tr>
+        <td style="padding:4px 8px;font-size:11.5px;white-space:nowrap;border-bottom:1px solid var(--border);${f.required?'font-weight:700':''}">${esc(f.label)}${f.required?' <span style="color:var(--danger)">*</span>':''}</td>
+        <td style="padding:3px 6px;border-bottom:1px solid var(--border)"><select style="width:100%;font-size:11.5px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:${cur?'var(--bg4)':'var(--bg3)'}" onchange="tplSetMap('${kind}','${f.key}',this.value)">${opts(cur)}</select></td>
+      </tr>`;
+    }).join('');
+    const sheetSel=(s.sheetNames&&s.sheetNames.length>1)?`
+      <span style="font-size:11px">시트
+      <select onchange="tplSetSheet('${kind}',this.value)" style="font-size:11.5px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg3)">
+        ${s.sheetNames.map(n=>`<option${n===s.sheetName?' selected':''}>${esc(n)}</option>`).join('')}
+      </select></span>`:'';
+    body=`
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <span style="font-size:11.5px;color:var(--text2)"><i class="ti ti-file-spreadsheet" style="font-size:12px;color:var(--success)"></i> ${esc(s.fileName||'')}</span>
+        <button class="btn" style="padding:3px 8px;font-size:11px;color:var(--danger);border-color:rgba(239,68,68,.3)" onclick="tplRemove('${kind}')"><i class="ti ti-trash" style="font-size:12px"></i> 제거</button>
+      </div>
+      <div style="display:flex;gap:14px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+        ${sheetSel}
+        <span style="font-size:11px">헤더 행 <input type="number" min="1" value="${s.headerRow}" onchange="tplSetRow('${kind}','header',this.value)" style="width:52px;font-size:11.5px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg3)"></span>
+        <span style="font-size:11px">데이터 시작 행 <input type="number" min="2" value="${s.dataStartRow}" onchange="tplSetRow('${kind}','data',this.value)" style="width:52px;font-size:11.5px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg3)"></span>
+        <button class="btn" style="padding:3px 9px;font-size:11px" onclick="tplRunAiMap('${kind}')"><i class="ti ti-sparkles" style="font-size:12px"></i> AI 자동 매핑</button>
+      </div>
+      <p style="font-size:10.5px;color:var(--text3);margin-bottom:6px">데이터 시작 행이 <b>서식(테두리)이 있는 빈 샘플 행</b>을 가리키면 출력 데이터에도 그 서식이 유지됩니다.</p>
+      <div style="max-height:250px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+        <table style="width:100%;border-collapse:collapse">${mapRows}</table>
+      </div>`;
+  }
+  return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;background:var(--bg3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+      <h4 style="font-size:13px;font-weight:700">${title}</h4>
+      <label class="btn" style="padding:4px 10px;font-size:11.5px;cursor:pointer">
+        <i class="ti ti-upload" style="font-size:12px"></i> ${s?'양식 교체':'양식 선택'}
+        <input type="file" accept=".xlsx" style="display:none" onchange="tplOnFile('${kind}',this)">
+      </label>
+    </div>
+    <div id="tplStatus_${kind}" style="font-size:11px;color:var(--accent2);min-height:15px;margin-bottom:4px"></div>
+    ${body}
+  </div>`;
+}
+
 /* ─ Reset Project ─ */
 function resetProject(){
   if(!confirm('모든 공정 데이터와 프로젝트 정보를 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
@@ -4167,6 +4730,7 @@ function initApp(){
   if(procs.length>0){ selProc(cur>=0?cur:0); } else { renderContent(); }
   checkApiBar();
   updateApiKeyBtn();
+  updateTplBadge();
   try{ if(localStorage.getItem('ui_drwstrip_collapsed')==='1') toggleDrwStrip(true); }catch(_){}
   idbGet('proj_drawings').then(saved=>{
     if(saved&&saved.length){
