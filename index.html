@@ -4469,6 +4469,29 @@ function downloadBlob(blob, filename){
   setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 
+/* ─ ExcelJS가 원본 양식(.xlsx)을 다시 저장(writeBuffer)할 때 Excel의
+     "…내용에 문제가 있습니다 / 복구하시겠습니까?" 프롬프트를 유발하는 요소를
+     내보내기 직전에 제거한다.
+     - 정의된 이름(인쇄 영역·반복할 행 등)에 든 $·작은따옴표를 ExcelJS가
+       저장 시마다 잘못 이스케이프(&apos;, $$)해 파일이 손상됨 (exceljs#664)
+     - 화면상 데이터/서식에는 영향 없음. "인쇄 제목 반복" 설정만 사라짐 ─ */
+function tplSanitizeWorkbook(wb){
+  // 인쇄 영역/반복할 행 관련 정의된 이름(_xlnm.Print_Area / _xlnm.Print_Titles)만 제거하고
+  // 사용자가 만든 일반 명명 범위는 그대로 둔다 (수식이 참조할 수 있으므로)
+  try{
+    const dn=wb.definedNames;
+    if(dn && Array.isArray(dn.model)){
+      dn.model=dn.model.filter(x=>!(x && typeof x.name==='string' && /^_xlnm\./i.test(x.name)));
+    }
+  }catch(_){}
+  (wb.worksheets||[]).forEach(ws=>{
+    [ws.pageSetup, ws.model&&ws.model.pageSetup].forEach(ps=>{
+      if(!ps) return;
+      try{ delete ps.printArea; delete ps.printTitlesRow; delete ps.printTitlesColumn; }catch(_){}
+    });
+  });
+}
+
 /* ─ 양식 하나를 채워 다운로드 ─ */
 async function tplExport(kind, tpl, appendFlow){
   if(typeof ExcelJS==='undefined') throw new Error('ExcelJS 라이브러리 로드 실패 (네트워크 확인)');
@@ -4541,6 +4564,7 @@ async function tplExport(kind, tpl, appendFlow){
 
   if(appendFlow) tplAppendFlowSheet(wb);
 
+  tplSanitizeWorkbook(wb);
   const out=await wb.xlsx.writeBuffer();
   const pn=(V('partNum')||'유라').replace(/[\\\/:*?"<>|]/g,'_');
   const ymd=new Date().toISOString().slice(0,10).replace(/-/g,'');
