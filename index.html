@@ -4320,6 +4320,30 @@ function tplKeywordMap(kind, columns){
   return map;
 }
 
+/* ─ 열 매핑 기억 (같은 양식을 재등록/교체해도 이전 매핑을 복원) ─
+   서명 = 헤더 텍스트 조합. 동일 양식이면 헤더 조합이 그대로 유지되므로
+   파일을 다시 올리거나 다른 프로젝트에서 같은 양식을 써도 매핑이 자동 복원된다. */
+function tplSignature(columns){
+  return (columns||[]).map(c=>c.header||'').join('§');
+}
+function tplMapMemLoad(){
+  try{ return JSON.parse(localStorage.getItem('pfmea_tpl_mapmem')||'{}'); }catch(_){ return {}; }
+}
+function tplMapMemSave(kind, sig, mapping){
+  if(!sig || !mapping || !Object.keys(mapping).length) return;
+  try{
+    const all=tplMapMemLoad();
+    all[kind]=all[kind]||{};
+    all[kind][sig]=mapping;
+    localStorage.setItem('pfmea_tpl_mapmem', JSON.stringify(all));
+  }catch(_){}
+}
+function tplMapMemGet(kind, sig){
+  if(!sig) return null;
+  const all=tplMapMemLoad();
+  return (all[kind]&&all[kind][sig])||null;
+}
+
 /* ─ Claude 자동 열 매핑 ─ */
 async function tplAiMap(kind, columns){
   if(!getKey()) return null;
@@ -4392,6 +4416,19 @@ function tplParseRef(ref){
   return {left:colLetterToNum(m[1]), top:+m[2], right:colLetterToNum(m[3]), bottom:+m[4]};
 }
 function tplThinBorder(){ const s={style:'thin',color:{argb:'FFBFBFBF'}}; return {top:s,left:s,bottom:s,right:s}; }
+
+/* ─ 시트 병합 범위 → 그리드(최대 20행×50열) 좌표계로 정리 (셀 클릭 선택 UI에 사용) ─ */
+function tplMergesOf(ws, maxR, maxC){
+  const merges=(ws.model && ws.model.merges)||[];
+  const out=[];
+  merges.forEach(ref=>{
+    const m=tplParseRef(ref); if(!m) return;
+    if(m.top>maxR || m.left>maxC) return;
+    const r1=m.top, c1=m.left, r2=Math.min(m.bottom,maxR), c2=Math.min(m.right,maxC);
+    if(r2>=r1 && c2>=c1 && (r2>r1 || c2>c1)) out.push({r1,c1,r2,c2});
+  });
+  return out;
+}
 
 /* ─ 공정흐름도 시트 추가 (ExcelJS) ─ */
 function tplAppendFlowSheet(wb){
@@ -4533,8 +4570,101 @@ async function openTplModal(){
     const [p,c]=await Promise.all([idbGet('tpl_pfmea'),idbGet('tpl_cp')]);
     _tplState.pfmea=p||null; _tplState.cp=c||null;
   }catch(_){ _tplState={pfmea:null,cp:null}; }
+  _tplArmed=null;
   renderTplSections();
   document.getElementById('tplModal').classList.add('open');
+  tplEnsureMerges('pfmea'); tplEnsureMerges('cp');
+}
+/* ─ 예전에 저장된 양식(병합 정보 없이 저장됨)에 병합 정보를 뒤늦게 채워 넣음 ─ */
+async function tplEnsureMerges(kind){
+  const s=_tplState[kind];
+  if(!s || s.merges || !s.buf) return;
+  try{
+    const wb=new ExcelJS.Workbook();
+    await wb.xlsx.load(s.buf);
+    const ws=wb.getWorksheet(s.sheetName)||wb.worksheets[0];
+    const maxC=(s.grid&&s.grid[0])?s.grid[0].length:0;
+    s.merges=tplMergesOf(ws, (s.grid||[]).length, maxC);
+    tplPersist(kind);
+    renderTplSections();
+  }catch(_){ s.merges=[]; }
+}
+/* ─ 시트에서 셀 클릭으로 필드 매핑 (병합된 헤더 셀도 한 번에 선택) ─ */
+let _tplArmed=null; // {kind,fkey}
+function tplArmPick(kind, fkey){
+  _tplArmed=(_tplArmed && _tplArmed.kind===kind && _tplArmed.fkey===fkey) ? null : {kind,fkey};
+  renderTplSections();
+}
+function tplGridCellClick(kind, colLetter, row){
+  if(!_tplArmed || _tplArmed.kind!==kind){
+    toast('먼저 매핑할 필드의 "선택" 버튼을 눌러주세요','err');
+    return;
+  }
+  const s=_tplState[kind];
+  const fkey=_tplArmed.fkey;
+  if(s){ s.cellHint=s.cellHint||{}; s.cellHint[fkey]=colLetter+row; }
+  tplSetMap(kind, fkey, colLetter);
+  _tplArmed=null;
+  renderTplSections();
+}
+function tplClearMap(kind, fkey){
+  const s=_tplState[kind]; if(!s) return;
+  if(s.cellHint) delete s.cellHint[fkey];
+  tplSetMap(kind, fkey, '');
+  renderTplSections();
+}
+/* ─ 헤더 행까지의 시트 미리보기 표 (병합 셀은 colspan/rowspan으로 실제 모양대로 표시) ─ */
+function tplGridTableHtml(kind, s){
+  const grid=s.grid||[];
+  const rows=grid.length;
+  const colCount=Math.max((s.columns&&s.columns.length)||0, grid[0]?grid[0].length:0);
+  if(!rows || !colCount) return '';
+  const merges=s.merges||[];
+  const mergeAt=(r,c)=>merges.find(m=>r>=m.r1&&r<=m.r2&&c>=m.c1&&c<=m.c2);
+  const covered=new Set();
+  const mapping=s.mapping||{};
+  const colField={};
+  Object.keys(mapping).forEach(k=>{
+    const col=mapping[k]; if(!col) return;
+    const f=TPL_FIELDS[kind].find(x=>x.key===k); if(!f) return;
+    (colField[col]=colField[col]||[]).push(f.label);
+  });
+  let html='<div style="overflow:auto;max-height:280px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">'
+    +'<table style="border-collapse:collapse;font-size:10.5px"><tr>'
+    +'<td style="position:sticky;left:0;top:0;padding:2px 5px;background:var(--bg2);border:1px solid var(--border);z-index:2"></td>';
+  for(let c=1;c<=colCount;c++){
+    html+=`<td style="position:sticky;top:0;padding:2px 6px;background:var(--bg2);border:1px solid var(--border);color:var(--text3);text-align:center;font-weight:700;z-index:1">${colNumToLetter(c)}</td>`;
+  }
+  html+='</tr>';
+  for(let r=1;r<=rows;r++){
+    const isHeaderRow=r===s.headerRow, isDataRow=r===s.dataStartRow;
+    const rowLbl=isHeaderRow?'헤더':(isDataRow?'데이터':r);
+    const rowBg=isHeaderRow?'var(--accent2)':(isDataRow?'var(--success)':'var(--bg2)');
+    const rowFg=(isHeaderRow||isDataRow)?'#fff':'var(--text3)';
+    html+=`<tr><td title="${r}행${isHeaderRow?' — 헤더 행':''}${isDataRow?' — 데이터 시작 행':''}" style="position:sticky;left:0;padding:2px 5px;background:${rowBg};border:1px solid var(--border);color:${rowFg};text-align:center;font-size:9.5px;white-space:nowrap">${rowLbl}</td>`;
+    for(let c=1;c<=colCount;c++){
+      if(covered.has(r+','+c)) continue;
+      const m=mergeAt(r,c);
+      let rs=1, cs=1;
+      if(m && m.r1===r && m.c1===c){
+        const r2=Math.min(m.r2, rows), c2=m.c2;
+        rs=r2-r+1; cs=c2-c+1;
+        for(let rr=m.r1; rr<=m.r2; rr++) for(let cc=m.c1; cc<=m.c2; cc++) if(!(rr===r&&cc===c)) covered.add(rr+','+cc);
+      }else if(m){
+        continue;
+      }
+      const text=String((grid[r-1]||[])[c-1]||'');
+      const colLetter=colNumToLetter(c);
+      const assigned=colField[colLetter];
+      const bg=assigned?'var(--accent2)':'var(--bg4)';
+      const fg=assigned?'#fff':'inherit';
+      const title=(text?text+' — ':'')+`${colLetter}${r}`+(assigned?` — 매핑: ${assigned.join(', ')}`:'');
+      html+=`<td rowspan="${rs}" colspan="${cs}" title="${esc(title)}" onclick="tplGridCellClick('${kind}','${colLetter}',${r})" style="padding:4px 7px;border:1px solid var(--border);cursor:pointer;background:${bg};color:${fg};max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(text)||'&nbsp;'}</td>`;
+    }
+    html+='</tr>';
+  }
+  html+='</table></div>';
+  return html;
 }
 function closeTplModal(){
   document.getElementById('tplModal').classList.remove('open');
@@ -4549,10 +4679,11 @@ function updateTplBadge(){
 function tplPersist(kind){
   const s=_tplState[kind];
   if(!s) return idbDel('tpl_'+kind).catch(()=>{});
+  tplMapMemSave(kind, tplSignature(s.columns), s.mapping);
   return idbSet('tpl_'+kind, {
     fileName:s.fileName, buf:s.buf, grid:s.grid, sheetNames:s.sheetNames,
     sheetName:s.sheetName, headerRow:s.headerRow, dataStartRow:s.dataStartRow,
-    columns:s.columns, mapping:s.mapping, savedAt:s.savedAt
+    columns:s.columns, mapping:s.mapping, merges:s.merges, cellHint:s.cellHint, savedAt:s.savedAt
   }).catch(e=>{ console.error(e); toast('양식 저장 실패 (용량 초과?)','err'); });
 }
 
@@ -4572,19 +4703,28 @@ async function tplOnFile(kind, input){
     const grid=tplGridOf(ws);
     const det=tplLayoutFromGrid(grid);
     const columns=tplColumnsFromGrid(grid, det.headerRow);
-    setStat('열 자동 매핑 중…');
-    let mapping=tplKeywordMap(kind, columns);
-    const ai=await tplAiMap(kind, columns);
-    if(ai) mapping={...mapping, ...ai};
+    const merges=tplMergesOf(ws, grid.length, grid[0]?grid[0].length:0);
+    const remembered=tplMapMemGet(kind, tplSignature(columns));
+    let mapping, statMsg;
+    if(remembered){
+      mapping=remembered;
+      statMsg='이전에 저장한 매핑을 불러왔습니다 — 확인하세요';
+    }else{
+      setStat('열 자동 매핑 중…');
+      mapping=tplKeywordMap(kind, columns);
+      const ai=await tplAiMap(kind, columns);
+      if(ai) mapping={...mapping, ...ai};
+      statMsg=ai?'완료 (AI 매핑) — 매핑을 확인하세요':'완료 (키워드 매핑) — 매핑을 확인하세요';
+    }
     _tplState[kind]={
-      fileName:file.name, buf, grid,
+      fileName:file.name, buf, grid, merges,
       sheetNames:wb.worksheets.map(w=>w.name), sheetName:ws.name,
       headerRow:det.headerRow, dataStartRow:det.dataStartRow,
       columns, mapping, savedAt:Date.now()
     };
     await tplPersist(kind);
     updateTplBadge();
-    setStat(ai?'완료 (AI 매핑) — 매핑을 확인하세요':'완료 (키워드 매핑) — 매핑을 확인하세요');
+    setStat(statMsg);
     renderTplSections();
   }catch(e){
     console.error(e);
@@ -4622,7 +4762,9 @@ function tplSetSheet(kind, name){
     const det=tplLayoutFromGrid(s.grid);
     s.headerRow=det.headerRow; s.dataStartRow=det.dataStartRow;
     s.columns=tplColumnsFromGrid(s.grid, s.headerRow);
-    s.mapping=tplKeywordMap(kind, s.columns);
+    s.merges=tplMergesOf(ws, s.grid.length, s.grid[0]?s.grid[0].length:0);
+    s.mapping=tplMapMemGet(kind, tplSignature(s.columns)) || tplKeywordMap(kind, s.columns);
+    s.cellHint={};
     tplPersist(kind);
     renderTplSections();
   }).catch(e=>{ console.error(e); toast('시트 전환 실패','err'); });
@@ -4643,6 +4785,7 @@ async function tplRunAiMap(kind){
 }
 function tplRemove(kind){
   _tplState[kind]=null;
+  if(_tplArmed && _tplArmed.kind===kind) _tplArmed=null;
   idbDel('tpl_'+kind).catch(()=>{});
   updateTplBadge();
   renderTplSections();
@@ -4659,16 +4802,18 @@ function tplSectionHtml(kind){
   if(!s){
     body=`<p style="font-size:11.5px;color:var(--text3)">등록된 양식이 없습니다. 위 버튼으로 .xlsx 파일을 선택하세요. (미등록 시 이 시트는 내보내지 않습니다)</p>`;
   }else{
-    const cols=s.columns||[];
-    const opts=sel=>`<option value="">(없음)</option>`+cols.map(c=>{
-      const lbl=`${c.col}${c.header?' — '+c.header:''}`;
-      return `<option value="${c.col}"${sel===c.col?' selected':''}>${esc(lbl.slice(0,64))}</option>`;
-    }).join('');
     const mapRows=TPL_FIELDS[kind].map(f=>{
       const cur=(s.mapping||{})[f.key]||'';
-      return `<tr>
+      const hint=(s.cellHint||{})[f.key]||'';
+      const armed=!!(_tplArmed && _tplArmed.kind===kind && _tplArmed.fkey===f.key);
+      const display=cur?esc(hint||cur):'(없음)';
+      return `<tr${armed?' style="background:rgba(99,102,241,.14)"':''}>
         <td style="padding:4px 8px;font-size:11.5px;white-space:nowrap;border-bottom:1px solid var(--border);${f.required?'font-weight:700':''}">${esc(f.label)}${f.required?' <span style="color:var(--danger)">*</span>':''}</td>
-        <td style="padding:3px 6px;border-bottom:1px solid var(--border)"><select style="width:100%;font-size:11.5px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:${cur?'var(--bg4)':'var(--bg3)'}" onchange="tplSetMap('${kind}','${f.key}',this.value)">${opts(cur)}</select></td>
+        <td style="padding:3px 6px;border-bottom:1px solid var(--border)">
+          <span style="display:inline-block;min-width:44px;text-align:center;font-size:11.5px;font-weight:${cur?'700':'400'};color:${cur?'var(--text)':'var(--text3)'};background:${cur?'var(--bg4)':'var(--bg3)'};border:1px solid var(--border);border-radius:6px;padding:4px 8px">${display}</span>
+          ${cur?`<button class="btn" style="padding:2px 6px;font-size:10.5px;margin-left:4px" onclick="tplClearMap('${kind}','${f.key}')" title="매핑 해제"><i class="ti ti-x" style="font-size:11px"></i></button>`:''}
+        </td>
+        <td style="padding:3px 6px;border-bottom:1px solid var(--border)"><button class="btn" style="padding:2px 7px;font-size:10.5px;white-space:nowrap;${armed?'background:var(--accent2);color:#fff':''}" onclick="tplArmPick('${kind}','${f.key}')" title="아래 표에서 셀을 클릭해 이 필드에 매핑합니다"><i class="ti ti-click" style="font-size:11px"></i> ${armed?'선택 중…':'선택'}</button></td>
       </tr>`;
     }).join('');
     const sheetSel=(s.sheetNames&&s.sheetNames.length>1)?`
@@ -4676,6 +4821,11 @@ function tplSectionHtml(kind){
       <select onchange="tplSetSheet('${kind}',this.value)" style="font-size:11.5px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg3)">
         ${s.sheetNames.map(n=>`<option${n===s.sheetName?' selected':''}>${esc(n)}</option>`).join('')}
       </select></span>`:'';
+    const armedField=(_tplArmed && _tplArmed.kind===kind)?TPL_FIELDS[kind].find(f=>f.key===_tplArmed.fkey):null;
+    const armedInfo=armedField?`<p style="font-size:10.5px;color:var(--accent2);margin-bottom:6px">
+        <i class="ti ti-hand-click" style="font-size:11px"></i> <b>${esc(armedField.label)}</b>에 매핑할 셀을 아래 표에서 클릭하세요 (병합된 셀은 한 번에 선택됩니다).
+        <a href="#" onclick="tplArmPick('${kind}','${armedField.key}');return false" style="color:var(--danger)">취소</a>
+      </p>`:'';
     body=`
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
         <span style="font-size:11.5px;color:var(--text2)"><i class="ti ti-file-spreadsheet" style="font-size:12px;color:var(--success)"></i> ${esc(s.fileName||'')}</span>
@@ -4687,7 +4837,9 @@ function tplSectionHtml(kind){
         <span style="font-size:11px">데이터 시작 행 <input type="number" min="2" value="${s.dataStartRow}" onchange="tplSetRow('${kind}','data',this.value)" style="width:52px;font-size:11.5px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;background:var(--bg3)"></span>
         <button class="btn" style="padding:3px 9px;font-size:11px" onclick="tplRunAiMap('${kind}')"><i class="ti ti-sparkles" style="font-size:12px"></i> AI 자동 매핑</button>
       </div>
-      <p style="font-size:10.5px;color:var(--text3);margin-bottom:6px">데이터 시작 행이 <b>서식(테두리)이 있는 빈 샘플 행</b>을 가리키면 출력 데이터에도 그 서식이 유지됩니다.</p>
+      <p style="font-size:10.5px;color:var(--text3);margin-bottom:6px">데이터 시작 행이 <b>서식(테두리)이 있는 빈 샘플 행</b>을 가리키면 출력 데이터에도 그 서식이 유지됩니다. 필드의 <b>선택</b> 버튼을 누른 뒤 아래 시트 미리보기에서 <b>실제 헤더 텍스트가 있는 행(반드시 "헤더 행"일 필요 없음)</b>을 찾아 셀을 클릭하면 병합된 범위(예: C~E열)도 한 번에 선택되고, 다음에 같은 양식을 쓸 때 매핑이 자동으로 기억됩니다.</p>
+      ${tplGridTableHtml(kind, s)}
+      ${armedInfo}
       <div style="max-height:250px;overflow:auto;border:1px solid var(--border);border-radius:8px">
         <table style="width:100%;border-collapse:collapse">${mapRows}</table>
       </div>`;
